@@ -14,7 +14,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 
 | # | Phase | Status | Depends on | Output | ADR block |
 |---|---|---|---|---|---|
-| 00 | Pre-flight, scope & three-tier framing | `todo` | — | `drafts/00-scope.md` | 001–003 |
+| 00 | Pre-flight, scope & three-tier framing | `done` | — | `drafts/00-scope.md` | 001–003 |
 | 01 | Cloud environment structure | `todo` | 00 | `drafts/01-cloud-environment.md` | 004–006 |
 | 02 | Network design | `todo` | 00 | `drafts/02-network.md` | 007–010 |
 | 03 | Compute platform — EKS | `todo` | 00 | `drafts/03-compute-eks.md` | 011–014 |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `00`
+**Next phase to run:** `01`
 
 ---
 
@@ -40,7 +40,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 
 | Phase | Block (exact) | Numbers written | Titles |
 |---|---|---|---|
-| 00 | 001–003 | — | — |
+| 00 | 001–003 | 001, 002, 003 | AWS as the Cloud Provider; Three-Tier Architecture Over Microservices or a Monolith; Managed Services First |
 | 01 | 004–006 | — | — |
 | 02 | 007–010 | — | — |
 | 03 | 011–014 | — | — |
@@ -78,6 +78,32 @@ cannot fill its block says so here rather than leaving a silent hole.
 
 <!-- Append completion reports below this line -->
 
+### Phase 00 — Pre-flight, scope & three-tier framing
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/00-scope.md` (1,090 words body excluding tables and ADRs; ADR-001 –
+  ADR-003, each 245–247 words excluding tables, all under the 250-word cap)
+- Word count:     1,090 (acceptance band 750–1,100; drafted at 1,165, trimmed §1/§2/§5 prose and
+  ADR-002 to land inside the band with margin)
+- ADRs written:   ADR-001 … ADR-003
+- Pillars tagged: Operational Excellence, Security, Cost Optimization, Reliability, Performance Efficiency
+- Key decisions:  Used "Operational Excellence · Security · Cost Optimization · Reliability" as the
+  `## Decision Records` section's pillar line, covering the pillars carried by ADR-001–003 combined;
+  kept the GCP discussion in §1 to two sentences per the contract.md cap, with the full argument in
+  ADR-001; reproduced the tier table from `contract.md` §1a verbatim (byte-identical, diff-checked)
+  in §2; cited ADR-002's Section field as `§0.2 Architecture overview — a three-tier design` and
+  ADR-001/003 as `§0 Scope, Assumptions and Design Principles`, both drawn from contract.md §14's
+  locked reference table rather than invented.
+- Assumptions:    none
+- Deferred:       Executive Summary left as the marker only, per this phase's instructions; all
+  design content for §1–§9 of the final document is deferred to Phases 01–09.
+- Contract additions: none
+- Notes for the next agent: `## Decision Records` did not originally carry the required orientation
+  paragraph and pillar line — both were added on a round-2 review pass, then independently
+  re-verified. §6 Requirement Traceability covers all 28 rows (R1–R28). §3's closing sentence and
+  well-architected.md §4 both cite `§10.7` for the accepted-trade-offs table, but contract.md §14's
+  locked reference table fixes it at `§9.7 Accepted trade-offs between pillars` — the draft uses
+  `§9.7` per contract.md's normative authority; logged below under Cross-phase issues for Phase 13.
+
 ---
 
 ## Open questions
@@ -98,7 +124,7 @@ cannot fill its block says so here rather than leaving a silent hole.
 
 | Spotted by | Where | Issue | Resolved in |
 |---|---|---|---|
-| — | — | — | — |
+| Phase 00 | `phases/phase-00-preflight-and-scope.md` §3 closing line and `well-architected.md` §4 both say the accepted-trade-offs table lives at `§10.7`, but `contract.md` §14's locked section map and reference table fix it at `§9.7 Accepted trade-offs between pillars` (there is no `§10.7` — `§10` is `Summary of Key Decisions`). `00-scope.md` §3 cites `§9.7`, following contract.md as normative. | Phase 13 should correct the stale `§10.7` references in the two source docs, or confirm `§9.7` is the intended target. |
 
 ---
 
