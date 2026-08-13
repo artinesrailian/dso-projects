@@ -1,0 +1,29 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+
+# Variable files may contain account IDs / CIDRs — never commit them
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Backend config carries the state bucket name
+backend.hcl
+!backend.hcl.example
+
+# Local overrides
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
