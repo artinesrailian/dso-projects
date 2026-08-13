@@ -1,0 +1,28 @@
+# This repository hosts multiple independent, self-contained assignments
+# (architecture/, terraform/), each with its own nested .gitignore for
+# stack-specific rules. Keep this file to generic, cross-cutting hygiene only.
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# Editor / IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Claude Code local settings (personal, not shared)
+.claude/settings.local.json
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
