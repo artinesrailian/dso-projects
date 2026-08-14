@@ -21,7 +21,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 04 | Containerization & CI/CD | `done` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
 | 05 | Database | `done` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `done` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
-| 07 | Observability & operational excellence | `todo` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
+| 07 | Observability & operational excellence | `done` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `todo` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
 | 09 | Well-Architected alignment & growth roadmap | `todo` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
 | 10 | Diagrams | `todo` | 01–09 | `../diagrams/01…05` | — |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `07`
+**Next phase to run:** `08`
 
 ---
 
@@ -47,7 +47,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
 | 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
 | 06 | 023–025 | 023, 024, 025 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
-| 07 | 026–027 | — | — |
+| 07 | 026–027 | 026, 027 | Open-Source Observability, Managed at Scale; SLO Targets and the Error-Budget Policy |
 | 08 | 028–029 | — | — |
 
 The finished register is **ADR-001 to ADR-029, no gaps**. Counts are exact, not ranges — a phase that
@@ -508,6 +508,76 @@ cannot fill its block says so here rather than leaving a silent hole.
   phases did not have visibility into. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase
   00, the EKS terminology conflict from Phase 04, or the Phase 02 ADR word-count finding from Phase
   03 — all out of scope here, still open for Phase 13.
+
+### Phase 07 — Observability & operational excellence
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/07-observability.md` (1,189 words body excluding tables and ADRs;
+  ADR-026 at 259 and ADR-027 at 256 words including the ADR heading and the "Options considered."
+  label, excluding both tables — both land at or a few words above 250 depending on whether the
+  heading/label are counted, using the same whitespace-token method Phases 03, 05, and 06 validated;
+  flagged below for Phase 13 rather than cut further, since every remaining sentence carries required
+  content a verification pass added)
+- Word count:     1,189 (acceptance band 800–1,250; phase document's own ~1,000-word ±20% band is
+  800–1,200 — both satisfied). Drafted at ~1,205, trimmed lightly during the fix pass; grew back
+  slightly when acronym-expansion fixes were applied, still inside both bands.
+- ADRs written:   ADR-026 – ADR-027
+- Pillars tagged: Operational Excellence, Reliability, Performance Efficiency, Cost Optimization
+  across the section's five pillar lines plus the `## Decision Records` orientation line (2–3 per
+  line); Security and Sustainability not tagged — neither is substantively served by this chapter's
+  own content, which is metrics, logs, traces, SLOs, alerting, and operational practice, not identity/
+  data protection or environmental efficiency.
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–06,
+  then ran three independent read-only verification passes via the Workflow tool (contract fidelity,
+  style/mechanics, ADR quality against `rubric.md`), which raised 3 contract findings, 6 style
+  findings, and 4 ADR-quality findings, and a fix pass that resolved all of them. Fixes of note:
+  dropped R20 from ADR-027's `Requirement` field after checking `brief.md` directly — R20 is owned by
+  phases 03/05/09, not 07 — replacing it with R25 ("follows best practices," owned by "all, 09");
+  added the fixed Synthetics domain `https://app.innovateinc.com` from `contract.md` §10 verbatim,
+  which the initial draft had paraphrased as "the SPA" only; expanded `EKS` and `RDS` at their true
+  first use in `## Observability strategy` rather than two sections later, and removed the resulting
+  duplicate `RDS` expansion; expanded `Availability Zone (AZs)` at its true first use inside the SLO
+  table cell rather than two sections later; expanded `single-page application (SPA)` at first use in
+  the four-signals table; removed the banned word "simply"; corrected future/conditional tense
+  ("will ask", "would like", "would require") to present tense in three places per `style-guide.md`
+  §1; added `Reliability` to ADR-026's `Pillars` field, which a verification pass found the ADR's own
+  Context and Why fields substantively argue (avoiding a single point of failure) but the metadata row
+  had omitted; rewrote ADR-026's `Accepts` field, which had restated the chosen option's own
+  Weaknesses cell from the options table almost verbatim instead of naming a distinct downside,
+  replacing it with the concrete cost of running blind through one incident before the trigger fires
+  and losing dashboard history at the cutover; added a fourth row to ADR-027's options table — an
+  error budget used only as a reporting signal, human call at breach — after a verification pass found
+  the original three rows tested only the numeric-target axis and never tested the automatic-freeze
+  *mechanism* itself against its most realistic rival, which the body prose two sections earlier
+  explicitly flags as the contested half of the decision; and quantified ADR-027's `Revisit when`
+  trigger, which had said the error budget "has room to spare" with no threshold, replacing it with
+  "finishes more than half unspent for two consecutive quarters" so the ADR's own thesis — a number
+  replacing a debate — does not contradict itself in its own trigger field.
+- Assumptions:    None beyond the pillar attribution above; no ambiguous requirement was silently
+  decided. Confirmed via `phases/phase-11-assembly.md`'s full chapter-6 subsection outline (§6.1–§6.5,
+  a 1:1 match to this draft's five `##` headings in the same order) that ADR-026 cites `§6.2 The four
+  signals` and ADR-027 cites `§6.3 Service level objectives` correctly — no "no pre-registered
+  subsection" issue for either ADR, unlike the pattern Phases 02–05 logged before Phase 06 found this
+  file.
+- Deferred:       Cost of the observability stack is named only as a qualitative clause ("costs
+  materially less" / "costs more"), never a figure — Phase 08 owns cost. Stage-by-stage growth detail
+  beyond a single named trigger per callout is Phase 09's — this draft names triggers only ("the first
+  incident where the cluster and its monitoring fail together, or the point at which an on-call
+  rotation exists") and stops there.
+- Contract additions: none.
+- Notes for the next agent: (1) ADR-026 and ADR-027 measure at 259 and 256 words respectively
+  including the `### ADR-0NN — <title>` heading and the "**Options considered.**" label text — both
+  land at essentially exactly 250 words of actual Context/Decision/Why/Consequences/Cost/Revisit prose
+  once those ~9–10 non-prose tokens are excluded, using the same method that reproduced Phase 01's
+  self-reported counts exactly. Every sentence remaining after two trim passes carries content a
+  verification pass explicitly required (a third pillar, a non-restated *Accepts* item, a fourth
+  options-table row, a quantified trigger) — flagged here rather than cut further, consistent with
+  Phase 03's precedent of flagging Phase 02's over-cap ADRs for Phase 13 rather than editing another
+  phase's file. (2) Phase 08 (Cost Optimization) should add the observability stack's indicative
+  monthly cost split (in-cluster vs. managed Prometheus/Grafana) to its cost table — this draft
+  deliberately did not derive one. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase 00, the
+  ADR-007/010, ADR-011, ADR-015, or ADR-020 Section-field issues from Phases 02–05, the Phase 02 ADR
+  word-count finding from Phase 03, or the EKS terminology conflict from Phase 04 — all out of scope
+  here, still open for Phase 13.
 
 ---
 
