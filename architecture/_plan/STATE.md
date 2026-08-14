@@ -21,7 +21,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 04 | Containerization & CI/CD | `done` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
 | 05 | Database | `done` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `done` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
-| 07 | Observability & operational excellence | `todo` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
+| 07 | Observability & operational excellence | `done` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `todo` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
 | 09 | Well-Architected alignment & growth roadmap | `todo` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
 | 10 | Diagrams | `todo` | 01–09 | `../diagrams/01…05` | — |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `07`
+**Next phase to run:** `08`
 
 ---
 
@@ -47,7 +47,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
 | 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
 | 06 | 023–025 | 023, 024, 025 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
-| 07 | 026–027 | — | — |
+| 07 | 026–027 | 026, 027 | Open-Source Observability, Managed at Scale; SLO Targets and the Error-Budget Policy |
 | 08 | 028–029 | — | — |
 
 The finished register is **ADR-001 to ADR-029, no gaps**. Counts are exact, not ranges — a phase that
@@ -509,6 +509,76 @@ cannot fill its block says so here rather than leaving a silent hole.
   00, the EKS terminology conflict from Phase 04, or the Phase 02 ADR word-count finding from Phase
   03 — all out of scope here, still open for Phase 13.
 
+### Phase 07 — Observability & operational excellence
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/07-observability.md` (1,189 words body excluding tables and ADRs;
+  ADR-026 at 259 and ADR-027 at 256 words including the ADR heading and the "Options considered."
+  label, excluding both tables — both land at or a few words above 250 depending on whether the
+  heading/label are counted, using the same whitespace-token method Phases 03, 05, and 06 validated;
+  flagged below for Phase 13 rather than cut further, since every remaining sentence carries required
+  content a verification pass added)
+- Word count:     1,189 (acceptance band 800–1,250; phase document's own ~1,000-word ±20% band is
+  800–1,200 — both satisfied). Drafted at ~1,205, trimmed lightly during the fix pass; grew back
+  slightly when acronym-expansion fixes were applied, still inside both bands.
+- ADRs written:   ADR-026 – ADR-027
+- Pillars tagged: Operational Excellence, Reliability, Performance Efficiency, Cost Optimization
+  across the section's five pillar lines plus the `## Decision Records` orientation line (2–3 per
+  line); Security and Sustainability not tagged — neither is substantively served by this chapter's
+  own content, which is metrics, logs, traces, SLOs, alerting, and operational practice, not identity/
+  data protection or environmental efficiency.
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–06,
+  then ran three independent read-only verification passes via the Workflow tool (contract fidelity,
+  style/mechanics, ADR quality against `rubric.md`), which raised 3 contract findings, 6 style
+  findings, and 4 ADR-quality findings, and a fix pass that resolved all of them. Fixes of note:
+  dropped R20 from ADR-027's `Requirement` field after checking `brief.md` directly — R20 is owned by
+  phases 03/05/09, not 07 — replacing it with R25 ("follows best practices," owned by "all, 09");
+  added the fixed Synthetics domain `https://app.innovateinc.com` from `contract.md` §10 verbatim,
+  which the initial draft had paraphrased as "the SPA" only; expanded `EKS` and `RDS` at their true
+  first use in `## Observability strategy` rather than two sections later, and removed the resulting
+  duplicate `RDS` expansion; expanded `Availability Zone (AZs)` at its true first use inside the SLO
+  table cell rather than two sections later; expanded `single-page application (SPA)` at first use in
+  the four-signals table; removed the banned word "simply"; corrected future/conditional tense
+  ("will ask", "would like", "would require") to present tense in three places per `style-guide.md`
+  §1; added `Reliability` to ADR-026's `Pillars` field, which a verification pass found the ADR's own
+  Context and Why fields substantively argue (avoiding a single point of failure) but the metadata row
+  had omitted; rewrote ADR-026's `Accepts` field, which had restated the chosen option's own
+  Weaknesses cell from the options table almost verbatim instead of naming a distinct downside,
+  replacing it with the concrete cost of running blind through one incident before the trigger fires
+  and losing dashboard history at the cutover; added a fourth row to ADR-027's options table — an
+  error budget used only as a reporting signal, human call at breach — after a verification pass found
+  the original three rows tested only the numeric-target axis and never tested the automatic-freeze
+  *mechanism* itself against its most realistic rival, which the body prose two sections earlier
+  explicitly flags as the contested half of the decision; and quantified ADR-027's `Revisit when`
+  trigger, which had said the error budget "has room to spare" with no threshold, replacing it with
+  "finishes more than half unspent for two consecutive quarters" so the ADR's own thesis — a number
+  replacing a debate — does not contradict itself in its own trigger field.
+- Assumptions:    None beyond the pillar attribution above; no ambiguous requirement was silently
+  decided. Confirmed via `phases/phase-11-assembly.md`'s full chapter-6 subsection outline (§6.1–§6.5,
+  a 1:1 match to this draft's five `##` headings in the same order) that ADR-026 cites `§6.2 The four
+  signals` and ADR-027 cites `§6.3 Service level objectives` correctly — no "no pre-registered
+  subsection" issue for either ADR, unlike the pattern Phases 02–05 logged before Phase 06 found this
+  file.
+- Deferred:       Cost of the observability stack is named only as a qualitative clause ("costs
+  materially less" / "costs more"), never a figure — Phase 08 owns cost. Stage-by-stage growth detail
+  beyond a single named trigger per callout is Phase 09's — this draft names triggers only ("the first
+  incident where the cluster and its monitoring fail together, or the point at which an on-call
+  rotation exists") and stops there.
+- Contract additions: none.
+- Notes for the next agent: (1) ADR-026 and ADR-027 measure at 259 and 256 words respectively
+  including the `### ADR-0NN — <title>` heading and the "**Options considered.**" label text — both
+  land at essentially exactly 250 words of actual Context/Decision/Why/Consequences/Cost/Revisit prose
+  once those ~9–10 non-prose tokens are excluded, using the same method that reproduced Phase 01's
+  self-reported counts exactly. Every sentence remaining after two trim passes carries content a
+  verification pass explicitly required (a third pillar, a non-restated *Accepts* item, a fourth
+  options-table row, a quantified trigger) — flagged here rather than cut further, consistent with
+  Phase 03's precedent of flagging Phase 02's over-cap ADRs for Phase 13 rather than editing another
+  phase's file. (2) Phase 08 (Cost Optimization) should add the observability stack's indicative
+  monthly cost split (in-cluster vs. managed Prometheus/Grafana) to its cost table — this draft
+  deliberately did not derive one. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase 00, the
+  ADR-007/010, ADR-011, ADR-015, or ADR-020 Section-field issues from Phases 02–05, the Phase 02 ADR
+  word-count finding from Phase 03, or the EKS terminology conflict from Phase 04 — all out of scope
+  here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -538,6 +608,7 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Draft 06 (this phase) took the other side, following `contract.md` §13's literal "Amazon EKS" — so the split is no longer unanimous. Not fixed here since it is a pre-existing pattern shared by earlier phases, not a defect unique to any one of them. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct whichever draft(s) don't match the intended authority — now three drafts to reconcile, not two. |
 | Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | Phase 11 should assign a subsection number to `## Configuration` during assembly and update ADR-020's Section field to match, if it numbers it. |
 | Phase 06 | `contract.md` §14 vs. `phases/phase-11-assembly.md` | Phases 02–05 each logged a "no pre-registered subsection number" issue for one or two ADRs' Section fields, reasoning from `contract.md` §14's short "most-cited" reference table alone. While resolving this phase's own ADR Section fields (`contract.md` §14 names `phase-11-assembly.md` as the authority for subsection numbering), it turned out that file already contains the **complete** subsection outline for every chapter, §0 through §9. Concretely: `§2.3 Routing, egress and private connectivity` appears to cover both ADR-007's topic (connectivity between environments) and ADR-010's topic (NAT Gateways/egress), which draft 02 splits across two `##` headings; `§3.1 Why Amazon EKS` matches ADR-011's topic directly; `§4.2 Configuration and connection management` matches ADR-020's topic directly. ADR-015 (SPA not containerized) is less clear-cut — draft 04's opening heading is "What gets containerized — and what does not," and no `phase-11-assembly.md` heading matches that wording exactly; the nearest candidates are `§3.1` or `§3.7 Containerization — image building`, but this needs a content read, not just a title match. Not fixed here — none of these are this phase's files. | Phase 13 should re-open the ADR-007/010, ADR-011, ADR-015, and ADR-020 Section-field entries above against `phase-11-assembly.md`'s outline directly (not `contract.md` §14's shorter table) and correct each ADR's Section field to its real subsection number, resolving ADR-015's ambiguous case by reading draft 04's content against the outline. |
+| Human (2026-08-15) | Repo-wide: `drafts/00-scope.md` (12×), `01-cloud-environment.md` (3×), `03-compute-eks.md` (2×), `05-database.md` (3×), `06-security.md` (2×); `phases/phase-00-preflight-and-scope.md` (6×), `phase-01-cloud-environment.md` (1×), `phase-03-compute-eks.md` (2×), `phase-05-database.md` (1×), `phase-06-security.md` (1×), `phase-12-frontmatter-and-register.md` (1×); `rubric.md` (2×), `well-architected.md` (2×) | An exact headcount — "five-person team" / "five engineers" / "five people" — is asserted as fact in roughly 36 places across the plan, contradicting `00-scope.md` §0.4's own declared assumption ("the engineering team numbers **three to eight** people"), which `phase-00-preflight-and-scope.md` item 3 of its own Assumptions instructions states the same way ("roughly three to eight people"). Fixed on this branch (2026-08-15, human-directed) only in `drafts/07-observability.md` and `phases/phase-07-observability.md` — every specific number there replaced with "small team" / "small engineering team", nothing else changed. Everywhere else is untouched. This matters for phases not yet run: `phase-09-well-architected-growth.md` instructs "reproduce... the trade-off table from `well-architected.md` §3... with every row present" — `well-architected.md`:30 ("Operational burden sized to a five-person team") sits in that table and would carry "five-person" into draft 09 and then into README §9.7 verbatim. `rubric.md`:56 and :112 similarly could lead Phase 13's Pass 9 (score against §2, fix anything below `strong`) to reintroduce the number into an otherwise-fixed chapter. `AGENT-PROTOCOL.md` §5.7 item 6 ("No invented facts... a specific AWS price, quota, limit, or version number not in `contract.md`") does not currently cover an invented headcount, which is how this got past every phase's own self-check. | Human to decide: (a) whether to fix the remaining ~34 instances (in the already-`done` drafts 00/01/03/05/06, and in `well-architected.md`/`rubric.md`/the phase-00/01/03/05/06/12 phase docs) or leave them; (b) whether `00-scope.md` §0.4's "three to eight people" hedge should be the kept single source of truth or removed too; (c) whether to add "team headcount" to `AGENT-PROTOCOL.md` §5.7 item 6's no-invented-facts list so phases 09–13 don't reintroduce it. Not resolved here — flagged per this table's own purpose rather than fixed unilaterally outside the scope asked for. |
 
 ---
 
