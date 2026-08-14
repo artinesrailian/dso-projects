@@ -17,7 +17,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 00 | Pre-flight, scope & three-tier framing | `done` | — | `drafts/00-scope.md` | 001–003 |
 | 01 | Cloud environment structure | `done` | 00 | `drafts/01-cloud-environment.md` | 004–006 |
 | 02 | Network design | `done` | 00 | `drafts/02-network.md` | 007–010 |
-| 03 | Compute platform — EKS | `todo` | 00 | `drafts/03-compute-eks.md` | 011–014 |
+| 03 | Compute platform — EKS | `done` | 00 | `drafts/03-compute-eks.md` | 011–014 |
 | 04 | Containerization & CI/CD | `todo` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
 | 05 | Database | `todo` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `todo` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `03`
+**Next phase to run:** `04`
 
 ---
 
@@ -43,7 +43,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 00 | 001–003 | 001, 002, 003 | AWS as the Cloud Provider; Three-Tier Architecture Over Microservices or a Monolith; Managed Services First |
 | 01 | 004–006 | 004, 005, 006 | Seven AWS Accounts Rather Than a Single Account; AWS Control Tower Rather Than Hand-Rolled AWS Organizations; IAM Identity Center Rather Than Per-Account IAM Users |
 | 02 | 007–010 | 007, 008, 009, 010 | One VPC Per Environment, No Interconnection; Three Availability Zones Rather Than Two; A Secondary CIDR in `100.64.0.0/10` for Pod Addresses; A NAT Gateway Per Availability Zone in Production, One in Non-Production |
-| 03 | 011–014 | — | — |
+| 03 | 011–014 | 011, 012, 013, 014 | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
 | 04 | 015–018 | — | — |
 | 05 | 019–022 | — | — |
 | 06 | 023–025 | — | — |
@@ -208,6 +208,64 @@ cannot fill its block says so here rather than leaving a silent hole.
   those headings. (4) Did not touch the open `§10.7`/`§9.7` cross-phase issue from Phase 00 — out of
   scope here, still open for Phase 13.
 
+### Phase 03 — Compute platform — EKS
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/03-compute-eks.md` (2,144 words body excluding tables, snippets, and
+  ADRs; ADR-011 – ADR-014 at 250, 250, 249, and 249 words respectively, excluding both tables, all at
+  or under the 250-word cap)
+- Word count:     2,144 (acceptance band 1,450–2,150 words per this phase's acceptance criteria;
+  phase document's own ~1,800-word target ±20% gives 1,440–2,160 — both satisfied). Drafted at ~2,464,
+  trimmed across all seven sections in a fix pass to land inside the band with a small margin, after
+  acronym expansions added back from the style pass pushed it back over 2,150 once.
+- ADRs written:   ADR-011 … ADR-014
+- Pillars tagged: Operational Excellence, Reliability, Security, Cost Optimization, Performance
+  Efficiency, Sustainability (all six except none omitted at the section level; five of six appear
+  across the section pillar lines — Sustainability appears once, on Node strategy, where Graviton and
+  Karpenter consolidation substantively serve it per `well-architected.md`'s own guidance that this is
+  the same decision as the Cost Optimization story, not a separate one)
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–02,
+  then ran three independent read-only verification passes via the Workflow tool (contract fidelity,
+  style/mechanics, ADR quality against `rubric.md`), which raised 3 contract findings, 15 style
+  findings, and 9 ADR findings, and a fix pass that resolved them. Fixes of note: corrected the ADR
+  template's own "Guaranteed QoS" framing — contract.md §6 and this phase's own content spec both
+  describe the requests/limits policy as landing pods in `Guaranteed` QoS, but Kubernetes' actual
+  semantics require every resource (CPU included) to have a matching limit for `Guaranteed`, and this
+  design deliberately sets no CPU limit; the draft states the technically correct `Burstable`
+  classification instead, with the accurate reasoning for why memory is still protected under pressure
+  (not logged as a contract deviation since it's a factual correction, not a design change — logged
+  under Assumptions below for visibility); fixed a banned word ("just") in ADR-012's options table;
+  trimmed a 28-line YAML snippet to 24 lines to meet the 25-line cap; backticked every bare `NodePool`
+  reference for consistency with every other Kubernetes object kind in the draft; expanded eight
+  acronyms on first use (VPC, CIDR, ECS, EC2, IAM, RDS, NAT, SQS, EBS, CSI) that were used before being
+  defined; added the missing `karpenter.sh/do-not-disrupt` half of contract §6's "Disruption controls"
+  row (only the `PodDisruptionBudget` half was originally covered); corrected several conditional-tense
+  ("would") instances to present tense per `style-guide.md` §1; and rewrote each ADR's
+  "Why this is the right choice for Innovate Inc." field to gloss every AWS product name and Kubernetes
+  term used within that field (EKS, Auto Mode, Kubernetes, Graviton, pod) rather than assuming the
+  reader already read the Decision field above, per `decision-register.md` §3's rule that an ADR field
+  must be self-contained — this pushed every ADR close to the 250-word cap and required trimming
+  Context/Consequences/Cost impact/Revisit when in the same pass to make room.
+- Assumptions:    The `Burstable`-not-`Guaranteed` QoS correction (above) is a factual correction to
+  this phase's own content spec, not an assumption about an ambiguous requirement — flagged here in
+  case Phase 06 or Phase 07 independently assert `Guaranteed` QoS elsewhere and need to be reconciled.
+- Deferred:       Image building, container registry, and CI/CD pipeline mechanics are named only as
+  forward references (§3.8, §3.9, and "the build pipeline") per this phase's explicit scope boundary;
+  Phase 04 designs them. Database connection scaling, read replicas, and Aurora Serverless v2 capacity
+  units are named once each in `## Scaling` and cross-referenced to Phase 05, not designed here.
+- Contract additions: `_plan/contract.md` §12 — Kubernetes minor-version upgrade SLA, "within 30 days
+  of general availability." This number appears in this phase's own instructions
+  (`phases/phase-03-compute-eks.md`) but not in `contract.md` itself; logged per contract.md's own rule
+  that a genuinely absent value a phase defines must be appended to §12.
+- Notes for the next agent: (1) See Cross-phase issues below for two findings: ADR-011's Section field
+  citing chapter level (no pre-registered subsection for its content), and an independent word-count
+  finding that Phase 02's ADR-007–010 measure over the 250-word cap under the same counting method that
+  exactly reproduced Phase 01's self-reported counts — flagged for Phase 13, not fixed here (not this
+  phase's file). (2) Phase 06 (security) should keep citing EKS Pod Identity and the platform node
+  group's taint as this draft states them — this draft's `## Workload isolation and multi-tenancy`
+  section is deliberately short and defers the wider posture to §5 Security and Data Protection rather
+  than repeating it. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase 00 or the ADR-007/010
+  Section-field issue from Phase 02 — both out of scope here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -231,6 +289,8 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 00 | `phases/phase-00-preflight-and-scope.md` §3 closing line and `well-architected.md` §4 both say the accepted-trade-offs table lives at `§10.7`, but `contract.md` §14's locked section map and reference table fix it at `§9.7 Accepted trade-offs between pillars` (there is no `§10.7` — `§10` is `Summary of Key Decisions`). `00-scope.md` §3 cites `§9.7`, following contract.md as normative. | Phase 13 should correct the stale `§10.7` references in the two source docs, or confirm `§9.7` is the intended target. |
 | Phase 02 | `drafts/02-network.md`, ADR-007 and ADR-010 Section fields | `contract.md` §14 pre-registers only `§2.2` and `§2.4` for the Network Design chapter; ADR-008/009 cite `§2.2`, but ADR-007 ("Connectivity between environments...") and ADR-010 ("Routing and internet egress") have no pre-registered subsection number, so both cite the chapter level `§2 Network Design` instead. | Phase 11 should assign subsection numbers to those two headings during assembly and update the two ADR Section fields to match, if it numbers them. |
 | Phase 02 | `contract.md` §11 cost table | No line item exists for interface VPC endpoint spend (16 endpoints × 3 AZs); `drafts/02-network.md` describes the per-endpoint charge qualitatively rather than deriving a total, per §11's no-derived-figures rule. | Phase 08 (Cost optimization) should add an indicative line item. |
+| Phase 03 | `drafts/03-compute-eks.md`, ADR-011 Section field | `contract.md` §14 pre-registers no subsection number for the "Why managed Kubernetes, and why EKS" content (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for this chapter); ADR-012/013 cite `§3.3` and ADR-014 cites `§3.5`, but ADR-011 cites the chapter level `§3 Compute Platform` instead, matching the precedent Phase 02 set for ADR-007/010. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
+| Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | Phase 13 should recount ADR-007 – ADR-010 against the 250-word cap (excluding the metadata and options tables) and trim if the finding holds. |
 
 ---
 
