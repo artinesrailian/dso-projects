@@ -14,7 +14,7 @@ The brief specifies managed Kubernetes, so the live question is how, not whether
 highest-consequence operational work from the team's plate: control-plane availability across three
 Availability Zones (AZs), `etcd` backups, control-plane patching, and TLS certificate rotation. It
 does not remove worker-node management, add-on version currency, or workload reliability — those
-remain the team's job, designed below. Kubernetes is more operational surface than a five-person team
+remain the team's job, designed below. Kubernetes is more operational surface than a small team
 strictly needs for a few hundred daily users; the reason to accept it now is that migrating later
 costs far more than learning it today.
 
@@ -119,31 +119,6 @@ forces every node to be replaced within 30 days regardless of utilization — ke
 without a separate patching process. Nodes run Bottlerocket or the EKS-optimized Amazon Machine Image
 (AMI), replaced rather than patched in place.
 
-```yaml
-apiVersion: karpenter.sh/v1
-kind: NodePool
-metadata:
-  name: app-arm64-spot
-spec:
-  weight: 100
-  template:
-    spec:
-      requirements:
-        - key: karpenter.sh/capacity-type
-          operator: In
-          values: ["spot"]
-        - key: kubernetes.io/arch
-          operator: In
-          values: ["arm64"]
-        - key: karpenter.k8s.aws/instance-family
-          operator: In
-          values: ["m7g", "c7g", "r7g", "m8g", "c8g"]
-      expireAfter: 720h
-  disruption:
-    consolidationPolicy: WhenEmptyOrUnderutilized
-    consolidateAfter: 1m
-```
-
 ---
 
 ## Scaling
@@ -207,8 +182,9 @@ requires a matching limit for every resource including CPU, exactly the throttli
 avoids. That is not a downgrade: a `Burstable` pod whose memory stays within its request — guaranteed
 by the request-equals-limit setting — ranks well below any pod exceeding its request when Kubernetes
 reclaims under memory pressure, and its CPU is never throttled while spare cycles exist. Nothing here
-intentionally runs `BestEffort`; the `LimitRange` below prevents an unbounded pod from being admitted,
-which would make it the first reclaimed under pressure.
+intentionally runs `BestEffort`; every namespace's `LimitRange` caps how large an unset request or
+limit can default to, so a pod without explicit values still lands in `Burstable`, never in
+`BestEffort` — the class that would be reclaimed first under pressure.
 
 | Namespace | Purpose |
 |---|---|
@@ -223,54 +199,23 @@ which would make it the first reclaimed under pressure.
 
 Each namespace carries a `ResourceQuota` capping total CPU, memory, pod count, and
 persistent-volume-claim (PVC) count, so one runaway deployment cannot consume the cluster's whole
-budget; a `LimitRange` supplies the default request and ceiling a pod needs to be admitted at all:
+budget; a `LimitRange` supplies the default request and ceiling a pod needs to be admitted at all.
 
-```yaml
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: innovate-api-quota
-  namespace: innovate-api
-spec:
-  hard:
-    requests.cpu: "8"
-    requests.memory: 16Gi
-    limits.memory: 16Gi
-    pods: "40"
-    persistentvolumeclaims: "0"
----
-apiVersion: v1
-kind: LimitRange
-metadata:
-  name: innovate-api-defaults
-  namespace: innovate-api
-spec:
-  limits:
-    - type: Container
-      defaultRequest: { cpu: 250m, memory: 512Mi }
-      default: { memory: 512Mi }
-      max: { memory: 1Gi }
-```
+A `PriorityClass` ladder — `platform-critical` > `app-high` > `app-default` > `overprovision` —
+decides who yields first under contention: platform pods preempt application pods before the
+burst-headroom pause pods, which always give way first.
 
-A `PriorityClass` ladder — `platform-critical` above `app-high` above `app-default` above
-`overprovision` — decides who yields first under contention: platform pods preempt application pods
-before application pods preempt the pause pods holding burst headroom, which always give way first.
+**Spread and disruption.** `topologySpreadConstraints` spread each `Deployment`'s replicas evenly
+across all three AZs, so losing one AZ costs at most a third of capacity, not half. A
+`PodDisruptionBudget` on every `Deployment` keeps voluntary disruption — node consolidation, an
+add-on upgrade, Spot reclamation — from ever draining a service to zero; long-running `innovate-jobs`
+tasks are exempted from consolidation until they finish rather than being cut off mid-task.
 
-**Spread and disruption.** `topologySpreadConstraints` with `maxSkew: 1` over
-`topology.kubernetes.io/zone` keeps replicas of the same `Deployment` spread across all three AZs, so
-losing one AZ removes at most a third of capacity, not half or all of it; anti-affinity keeps
-replicas off the same node where practical. A `PodDisruptionBudget` of `minAvailable: 50%` on every
-`Deployment` guarantees voluntary disruption — node consolidation, an add-on upgrade, Spot
-reclamation — never drains a service to zero. Long-running `innovate-jobs` tasks additionally carry
-`karpenter.sh/do-not-disrupt`, so consolidation skips their node entirely instead of racing a Celery
-task to finish.
-
-**Probes and graceful shutdown** make all of the above invisible to a user. A `startupProbe` covers
-slow first boots, a `livenessProbe` on `/healthz` restarts a hung pod, and a `readinessProbe` on
-`/readyz` — checking the database connection — removes a pod from the load balancer's target group
-before it receives traffic it cannot serve. A `terminationGracePeriodSeconds` window and a `preStop`
-sleep let in-flight requests finish before a pod stops — what makes a Spot interruption, a rolling
-deploy, and a consolidation event all look the same to a user: nothing.
+**Probes and graceful shutdown** make all of the above invisible to a user: liveness and readiness
+checks restart a hung pod and pull one that cannot yet serve traffic (for example, a lost database
+connection) out of rotation before it receives a request, and a termination grace period lets
+in-flight requests finish before a pod actually stops. The result is that a Spot interruption, a
+rolling deploy, and a consolidation event all look the same to a user — nothing.
 
 ---
 
@@ -347,7 +292,7 @@ this document.
 | **Section** | §3 Compute Platform |
 
 **Context.** Innovate Inc.'s brief asks for managed Kubernetes; the company expects to grow to
-millions of users, with five engineers and no platform team.
+millions of users, with a small engineering team and no platform team.
 
 **Options considered.**
 
