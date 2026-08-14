@@ -20,7 +20,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 03 | Compute platform — EKS | `done` | 00 | `drafts/03-compute-eks.md` | 011–014 |
 | 04 | Containerization & CI/CD | `done` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
 | 05 | Database | `done` | 00 | `drafts/05-database.md` | 019–022 |
-| 06 | Security & data protection | `todo` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
+| 06 | Security & data protection | `done` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
 | 07 | Observability & operational excellence | `todo` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `todo` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
 | 09 | Well-Architected alignment & growth roadmap | `todo` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `06`
+**Next phase to run:** `07`
 
 ---
 
@@ -46,7 +46,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 03 | 011–014 | 011, 012, 013, 014 | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
 | 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
 | 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
-| 06 | 023–025 | — | — |
+| 06 | 023–025 | 023, 024, 025 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
 | 07 | 026–027 | — | — |
 | 08 | 028–029 | — | — |
 
@@ -423,6 +423,92 @@ cannot fill its block says so here rather than leaving a silent hole.
   issues from Phases 02–04, the Phase 02 ADR word-count finding from Phase 03, or the EKS terminology
   conflict from Phase 04 — all out of scope here, still open for Phase 13.
 
+### Phase 06 — Security & data protection
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/06-security.md` (1,619–1,680 words body excluding tables and ADRs,
+  depending on whether the pillar-line callouts are counted — both readings land inside both the
+  1,150–1,700 acceptance-criteria band and the phase document's own ~1,400-word ±20% band
+  (1,120–1,680); ADR-023 at 249, ADR-024 at 246, ADR-025 at 249 words, excluding both tables, all
+  under the 250-word cap, counted with the same whitespace-token method Phases 03 and 05 validated)
+- Word count:     see above (reconciled against both the acceptance-criteria band and the phase
+  document's own word-budget band, per the advisor's finding that the two are not the same range;
+  drafted at ~1,613–1,674, grew past both 1,680 and 1,700 twice during the fix pass as required
+  content — the mandatory tag set with its two fixed values, eleven acronym expansions, the
+  tier-mapping column — was added, then trimmed back under both ceilings each time)
+- ADRs written:   ADR-023 … ADR-025
+- Pillars tagged: Security, Reliability, Operational Excellence across all nine `##` section pillar
+  lines (2–3 per line); Cost Optimization appears only in ADR-025's `Pillars` metadata row, not on
+  any section line. Four of six pillars overall; Performance Efficiency and Sustainability not
+  tagged anywhere — neither is substantively served by this chapter's own content, which is
+  identity, data protection, detection, audit, compliance, and response, not performance or
+  environmental efficiency.
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–05,
+  then ran three independent read-only verification passes via the Workflow tool (contract
+  fidelity, style/mechanics, ADR quality against `rubric.md`), which raised findings in all three
+  passes, and a fix pass that resolved them. Fixes of note: added the `contract.md` §9-mandated
+  tag set (`Environment`, `Application`, `Owner`, `CostCenter`, `DataClassification`, `ManagedBy`,
+  `Compliance`) to `## Data protection`, which the initial draft omitted entirely despite the
+  acceptance criteria explicitly requiring it; removed an invented "roughly thirty keys" figure
+  from ADR-023's `Cost impact` field that `contract.md` §11's no-derived-figures rule does not
+  permit, replaced with a qualitative statement pointing at the AWS Pricing Calculator; restructured
+  the defence-in-depth table in `## Security model` with an added `Protects` column mapping each of
+  the twelve layers to the presentation tier, the application tier, the data tier, or the boundaries
+  between them — the initial draft organized the table by control layer only, which a verification
+  pass correctly flagged as failing the acceptance criterion requiring the three-tier model to be
+  visible in this specific table, per `AGENT-PROTOCOL.md` §5.5; added `We` voice to five
+  recommendation-bearing sentences that had none, matching `style-guide.md` §1's modeled voice,
+  after a verification pass found the entire draft used zero instances of first-person-plural
+  phrasing despite being dense with the decision → reason → alternative → cost pattern that voice is
+  meant to carry; expanded eleven acronyms on first use that the initial draft had used bare
+  throughout (`EKS`, `IAM`, `KMS`, `SBOM`, `OIDC`, `IaC`, `VPC`, `ALB`, `RDS`, `ECR`, `OU`, `MFA`,
+  `WAF`, `GDPR`, `SOC 2`), following the same "Full Name (ABBR)" pattern draft 03 set for "AWS
+  Identity and Access Management (IAM) Identity Center"; added "a documented lawful basis for
+  processing user data" to the GDPR bullet in `## Compliance and privacy posture`, which the phase
+  document's own content specification names explicitly and the initial draft omitted; rewrote
+  ADR-023's `Accepts` field, which had restated its own options-table weakness cell nearly verbatim
+  (a monthly charge and a policy to write) instead of naming a real downside — replaced with the
+  self-inflicted denial-of-access risk a misconfigured or deleted key carries; rewrote ADR-023's
+  `Revisit when` trigger, which had named "administration overhead" — the same cost the ADR's own
+  `Accepts` field had just knowingly accepted, making it a trigger that would reopen a decision on
+  the basis of the cost the decision explicitly chose to pay — replaced with an externally-held or
+  hardware-backed key-material compliance trigger; anchored ADR-024's `Context` field to an Innovate
+  Inc. constraint (no dedicated security function to review logs by hand), which the initial draft
+  had left entirely abstract, unlike ADR-023 and ADR-025's Context fields; rewrote ADR-025's
+  plain-language field, whose closing sentence was meta-commentary about the value of writing the
+  ADR itself ("it names what would change the answer") rather than a business consequence to
+  Innovate Inc. — replaced with the concrete engineering-hours cost a mesh would impose; added `R4`
+  to ADR-025's `Requirement` field, since this phase's own goal statement claims "the cross-cutting
+  half of R4" and ADR-025 (service-mesh mTLS deferral) is the one ADR in this draft that is actually
+  about network security, not data-at-rest or audit; and shortened ADR-024's title from 10 words to
+  7 to satisfy `decision-register.md` §1's 8-word cap, matching the precedent Phase 01 set for
+  ADR-006 — the phase document's own suggested title ("Centralised immutable logging in a separate
+  account with Object Lock") is itself 10 words and was not followed literally for this reason.
+  Separately, while reading `phases/phase-11-assembly.md` to resolve this draft's own ADR `Section`
+  fields (`contract.md` §14 names that file as the authority for subsection numbering), discovered
+  it contains the **complete** subsection numbering for every chapter, §0 through §9 — not only §5.
+  This let all three ADRs here cite exact subsections (§5.1, §5.3, §5.4) rather than falling back to
+  chapter level; see Cross-phase issues below, since this appears to resolve four issues Phases
+  02–05 logged as "no pre-registered subsection number."
+- Assumptions:    None beyond the pillar attribution above; no ambiguous requirement was silently
+  decided.
+- Deferred:       The general identity, network, and supply-chain security mechanics already
+  designed in Phases 01–05 are referenced by section number only, per this phase's hard constraint,
+  and are not redesigned here. Shield Advanced, a SIEM, and a managed detection-and-response service
+  are named as deliberately not bought yet, with their triggers, but not designed.
+- Contract additions: none.
+- Notes for the next agent: (1) This draft's `## Detection and monitoring` and `## Audit and
+  logging` headings are two separate `##` sections, per this phase document's own content
+  specification — but `phase-11-assembly.md` merges them into one final subsection, `§5.4
+  Detection, audit and logging`. Phase 11 should combine these two headings' content under that one
+  subsection during assembly, the same way it already combines drafts 03 and 04 under `§3`. (2) The
+  `phase-11-assembly.md` discovery above (full subsection numbering already exists for every
+  chapter) is logged as a new, consolidated cross-phase issue below — Phase 13 should re-check
+  ADR-007/010, ADR-011, ADR-015, and ADR-020's `Section` fields against it, since those four appear
+  to have pre-registered numbers (`§1.1`, `§3.1`, `§3.7`, `§4.2` respectively) that their owning
+  phases did not have visibility into. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase
+  00, the EKS terminology conflict from Phase 04, or the Phase 02 ADR word-count finding from Phase
+  03 — all out of scope here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -449,8 +535,9 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 03 | `drafts/03-compute-eks.md`, ADR-011 Section field | `contract.md` §14 pre-registers no subsection number for the "Why managed Kubernetes, and why EKS" content (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for this chapter); ADR-012/013 cite `§3.3` and ADR-014 cites `§3.5`, but ADR-011 cites the chapter level `§3 Compute Platform` instead, matching the precedent Phase 02 set for ADR-007/010. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
 | Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | Phase 13 should recount ADR-007 – ADR-010 against the 250-word cap (excluding the metadata and options tables) and trim if the finding holds. |
 | Phase 04 | `drafts/04-containers-cicd.md`, ADR-015 Section field | `contract.md` §14 pre-registers no subsection number for "What gets containerized" (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for the Compute Platform chapter); ADR-016 and ADR-018 correctly cite `§3.8 Container registry`, but ADR-015 (the SPA-not-a-container decision) cites the chapter level `§3 Compute Platform` instead, matching the precedent Phases 02 and 03 set for ADR-007/010 and ADR-011. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
-| Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Not fixed here since it is a pre-existing pattern shared by an earlier phase, not a defect unique to this one. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct both drafts' first-use expansions to match if `contract.md` §13 is the intended authority. |
+| Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Draft 06 (this phase) took the other side, following `contract.md` §13's literal "Amazon EKS" — so the split is no longer unanimous. Not fixed here since it is a pre-existing pattern shared by earlier phases, not a defect unique to any one of them. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct whichever draft(s) don't match the intended authority — now three drafts to reconcile, not two. |
 | Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | Phase 11 should assign a subsection number to `## Configuration` during assembly and update ADR-020's Section field to match, if it numbers it. |
+| Phase 06 | `contract.md` §14 vs. `phases/phase-11-assembly.md` | Phases 02–05 each logged a "no pre-registered subsection number" issue for one or two ADRs' Section fields, reasoning from `contract.md` §14's short "most-cited" reference table alone. While resolving this phase's own ADR Section fields (`contract.md` §14 names `phase-11-assembly.md` as the authority for subsection numbering), it turned out that file already contains the **complete** subsection outline for every chapter, §0 through §9. Concretely: `§2.3 Routing, egress and private connectivity` appears to cover both ADR-007's topic (connectivity between environments) and ADR-010's topic (NAT Gateways/egress), which draft 02 splits across two `##` headings; `§3.1 Why Amazon EKS` matches ADR-011's topic directly; `§4.2 Configuration and connection management` matches ADR-020's topic directly. ADR-015 (SPA not containerized) is less clear-cut — draft 04's opening heading is "What gets containerized — and what does not," and no `phase-11-assembly.md` heading matches that wording exactly; the nearest candidates are `§3.1` or `§3.7 Containerization — image building`, but this needs a content read, not just a title match. Not fixed here — none of these are this phase's files. | Phase 13 should re-open the ADR-007/010, ADR-011, ADR-015, and ADR-020 Section-field entries above against `phase-11-assembly.md`'s outline directly (not `contract.md` §14's shorter table) and correct each ADR's Section field to its real subsection number, resolving ADR-015's ambiguous case by reading draft 04's content against the outline. |
 
 ---
 
