@@ -19,7 +19,7 @@ real.
 | Does it open with a summary a founder could read? | An executive summary with no unexplained jargon |
 | Is the reasoning visible, not just the conclusions? | A decision register appendix, and alternatives named inline |
 | Is it recognisably a Well-Architected design? | A pillar chapter, and pillar tags on the sections |
-| Is it the right length? | Substantial but finite. Filler scores worse than a tight document |
+| Is it the right length? | Roughly 9 000–12 000 words total (`style-guide.md` §6). Substantial but finite — filler scores worse than a tight document |
 | Does it look like one author wrote it? | Consistent names, consistent voice, no seams |
 
 **Failure modes that end the review early:** a broken Mermaid block; a missing assessment area; two
@@ -45,8 +45,10 @@ Each is scored `weak` / `adequate` / `strong`. Phase 13 must reach `strong` on e
 ### B. Justification quality — **the dimension that separates candidates**
 
 - [ ] Each major choice states the alternative it beat and why, inline.
-- [ ] The decision register runs ADR-001 to ADR-029 with no gaps, and every significant decision is
-      either a record or a row in the Summary of Key Decisions table.
+- [ ] Appendix B contains exactly the nine ADRs `decision-register.md` §2a fixes, and every other
+      significant decision — promoted or not — is at minimum a row in the Summary of Key Decisions
+      table. A decision with neither is the failure; a decision with a table row but no full ADR is
+      not.
 - [ ] Every ADR's options table contains at least one **genuinely reasonable** rejected alternative,
       argued fairly rather than strawmanned.
 - [ ] Every ADR's **"Why this is the right choice for Innovate Inc."** field is readable by a
@@ -173,6 +175,6 @@ answer. Content phases should make sure the answer is present *somewhere*.
 | High availability and disaster recovery conflated | Moderate |
 | No cost discussion, or cost figures presented as authoritative | Moderate |
 | Generic content that would apply to any client | Moderate |
-| Gaps or duplicates in ADR numbering | Minor but visible |
+| Appendix B missing one of the nine fixed ADRs, or carrying an extra one | Minor but visible |
 | Banned marketing words | Minor but cumulative |
 | Inconsistent naming between prose and diagram | Minor but cumulative |

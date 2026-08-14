@@ -102,9 +102,11 @@ Pull every name from `contract.md`. In particular:
 ## 6. Length discipline
 
 Each phase document states a word budget. Treat it as a ceiling with ±20% tolerance. The final
-README should land at roughly **13 000 – 16 000 words** including tables and the decision register —
-of which the **body (§0–§10) is 7 000–8 500** and **Appendix B, the 29 Architecture Decision Records,
-is 5 500–7 500**. The body is the part read start to finish and is deliberately kept to a length a
+README should land at roughly **9 000–12 000 words** including tables and the decision register — of
+which the **body (§0–§10) is 4 800–6 500** and **Appendix B, the nine promoted Architecture Decision
+Records (`decision-register.md` §2a), is 2 000–2 500**. (Amended 2026-08-14, down from 13 000–16 000 /
+7 000–8 500 / 5 500–7 500 — see `STATE.md`. The outline and its required tables are unchanged; the cut
+is prose only.) The body is the part read start to finish and is deliberately kept to a length a
 reviewer will actually finish; the register is a **reference appendix** with an index at the top, read
 selectively. Keeping those two budgets separate is what lets the document be both thorough and
 readable.

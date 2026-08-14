@@ -100,15 +100,18 @@ Content phases (01–09) each write a **draft section** to `_plan/drafts/`, endi
 | 06 | [Security & data protection](phases/phase-06-security.md) | `drafts/06-security.md` | 00, 01–05 | ~1 400 | 023–025 |
 | 07 | [Observability & operational excellence](phases/phase-07-observability.md) | `drafts/07-observability.md` | 00, 03, 05 | ~1 000 | 026–027 |
 | 08 | [Cost optimization & FinOps](phases/phase-08-cost.md) | `drafts/08-cost.md` | 00, 01–07 | ~1 300 | 028–029 |
-| 09 | [Well-Architected alignment & growth roadmap](phases/phase-09-well-architected-growth.md) | `drafts/09-wellarchitected-growth.md` | 01–08 | ~1 400 | — |
+| 09 | [Well-Architected alignment & growth roadmap](phases/phase-09-well-architected-growth.md) | `drafts/09-wellarchitected-growth.md` | 01–08 | ~900 | — |
 | 10 | [Diagrams](phases/phase-10-diagrams.md) | `../diagrams/01…05` | 01–09 | ~700 | — |
 | 11 | [Body assembly](phases/phase-11-assembly.md) | `../README.md` §0–§9 | 00–10 | assembles | — |
 | 12 | [Summary, decision register & appendices](phases/phase-12-frontmatter-and-register.md) | `../README.md` complete | 11 | ~1 200 | collects |
 | 13 | [QA, consistency audit & final polish](phases/phase-13-qa-and-final.md) | corrected `../README.md` | 12 | audits | — |
 
 **29 Architecture Decision Records** in total, ADR-001 to ADR-029, allocated per phase in
-[`decision-register.md`](decision-register.md) §2. Phase 12 collects them into Appendix B; Phase 13
-verifies there are no gaps.
+[`decision-register.md`](decision-register.md) §2 — all written into the phase drafts as the full
+design record. Phase 12 promotes **nine of them** into the graded document's Appendix B (the
+selection is fixed in §2a); the other twenty surface only as a row in the Summary of Key Decisions
+table. Phase 13 verifies the promoted nine are exactly right and the other twenty each have a row.
+*(Amended 2026-08-14 — originally all 29 were promoted; see `STATE.md` for why.)*
 
 > **Note.** Phases 01–05 hard-depend only on Phase 00 and can be re-run in isolation. Run everything
 > in numeric order anyway: Phases 06–09 are written to *reference rather than repeat* the earlier
@@ -129,7 +132,7 @@ verifies there are no gaps.
 | [`AGENT-PROTOCOL.md`](AGENT-PROTOCOL.md) | Normative | Boundaries, execution loop, writing rules, anti-patterns |
 | [`brief.md`](brief.md) | Normative | The client brief verbatim + the R1–R28 requirements register |
 | [`contract.md`](contract.md) | Normative | Fixed names, CIDRs, services, numbers, the three-tier model (§1a), cost anchors (§11), the final section map (§14) |
-| [`decision-register.md`](decision-register.md) | Normative | ADR template, the 29-record allocation, the standard a justification must meet |
+| [`decision-register.md`](decision-register.md) | Normative | ADR template, the 29-record allocation, the nine-record Appendix B promotion rule (§2a), the standard a justification must meet |
 | [`well-architected.md`](well-architected.md) | Normative | The six pillars applied to this design; tagging convention; accepted trade-offs |
 | [`style-guide.md`](style-guide.md) | Normative | Voice, Markdown conventions, Mermaid rules, banned words |
 | [`rubric.md`](rubric.md) | Reference | How a reviewer will score it; the depth probes they will run |

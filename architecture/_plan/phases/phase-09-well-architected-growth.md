@@ -54,8 +54,10 @@ upstream: log it as a cross-phase issue.
 
 ## Word budget
 
-**~1 400 words** (±20%), excluding tables. Roughly 800 for the pillar chapter and 600 for the
-roadmap.
+**~900 words** (±20%), excluding tables — cut from the original ~1,400 as part of a 2026-08-14
+plan-wide leaning-down (see `STATE.md`). Roughly 500 for the pillar chapter (six subsections at ~60
+words each plus the trade-off framing) and 400 for the roadmap. Hit this by writing tighter, not by
+dropping a pillar or a roadmap stage — both are still required in full.
 
 ---
 
@@ -71,7 +73,7 @@ of the framework is that it forces you to say which one you gave up and why.**
 
 > **Well-Architected pillars.** All six.
 
-### `### Operational Excellence` through `### Sustainability` (~90 words each)
+### `### Operational Excellence` through `### Sustainability` (~60 words each)
 
 One subsection per pillar, in the framework's canonical order: Operational Excellence, Security,
 Reliability, Performance Efficiency, Cost Optimization, Sustainability. Each subsection contains
@@ -98,7 +100,7 @@ drafts actually say before using it:
 | Cost Optimization | No commitment discounts until the baseline stabilises; per-namespace showback introduced rather than chargeback |
 | Sustainability | No measurement of the workload's carbon footprint; region selection driven by latency and cost rather than grid carbon intensity |
 
-### `### Accepted trade-offs between pillars` (~250 words + table)
+### `### Accepted trade-offs between pillars` (~150 words + table)
 
 **The most important part of this chapter**, and rubric probe 11. Reproduce and extend the trade-off
 table from `well-architected.md` §3 — columns `Trade-off | Leaned toward | At the expense of | Why,
@@ -130,7 +132,7 @@ Then the four-stage table. Costs come from `contract.md` §11; do not invent any
 | **3 — Scale** | ~100 000 daily users | Prefix delegation and the secondary pod CIDR in earnest; Shield Advanced and tightened WAF; a service mesh if service count grows; Compute Savings Plans; Aurora Global Database serving regional reads; read/write splitting in the application | Pods pending on IP exhaustion; NAT bandwidth saturation; DDoS exposure; a predictable compute baseline |
 | **4 — Millions** | millions of daily users | Multi-region active-active with latency-based routing; partitioning or sharding the write path; cell-based architecture; a dedicated platform team | Single-region recovery time no longer acceptable to the business; a single writer becomes the ceiling; blast radius of one bad deployment unacceptable |
 
-### `### What breaks first, and in what order` (~400 words)
+### `### What breaks first, and in what order` (~250 words)
 
 The part reviewers actually probe (rubric probe 8). Prose, ordered, each with **the observable
 signal** and **the answer**. Trace it through the three tiers, because that framing makes the order
@@ -167,7 +169,7 @@ the foundation, because the foundation was chosen for stage 4.
 
 ## Acceptance criteria
 
-- [ ] File is `_plan/drafts/09-wellarchitected-growth.md`, 1 150–1 700 words excluding tables.
+- [ ] File is `_plan/drafts/09-wellarchitected-growth.md`, 720–1 080 words excluding tables.
 - [ ] All six pillars have their own `###` subsection, in canonical order, **including
       Sustainability**.
 - [ ] Each pillar subsection has exactly three parts: one-sentence demand, a 5–8 row table with

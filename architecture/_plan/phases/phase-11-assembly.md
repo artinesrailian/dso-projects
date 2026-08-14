@@ -10,13 +10,27 @@
 ## Goal
 
 Turn ten independently-written drafts into **one document that reads as though one person wrote it in
-one sitting**. That is the whole job, and it is harder than it sounds: ten drafts concatenated is not
-a document. It repeats itself, it changes voice at every seam, and its headings do not form a
-coherent outline.
+one sitting** — and a materially shorter one. That is the whole job, and it is harder than it sounds:
+ten drafts concatenated is not a document. It repeats itself, it changes voice at every seam, its
+headings do not form a coherent outline, and — because each draft was written to its own generous
+word budget in isolation — it is roughly twice as long as the brief calls for.
 
 This phase is **editing, not writing**. Budget most of your effort on Steps 3 and 4 — de-duplicating
-the seams and normalising the voice. An agent that concatenates and stops has failed this phase even
-if every draft's content is present.
+the seams, normalising the voice, and cutting supporting prose down to what a decision needs to read
+as sound. An agent that concatenates and stops has failed this phase even if every draft's content is
+present; so has an agent that de-duplicates the exact repeats but leaves every paragraph at its
+original length.
+
+> **Amendment, 2026-08-14.** The body target below was cut from 7 000–8 500 words to 4 800–6 500 as
+> part of a plan-wide leaning-down (see `STATE.md`). The outline itself — every `###` subsection and
+> every required table (account inventory, subnet table, node pools, RPO/RTO, the defence-in-depth
+> table, the six pillar evidence tables, the four-stage growth table) — is **unchanged**; those tables
+> alone run an estimated 1 800–2 500 words, and `contract.md` §14's locked section map depends on
+> every subsection staying put. The cut therefore falls entirely on prose: 1–3 sentences per
+> subsection (Step 4a), not on dropping a subsection, a table, or a table row to hit the number. The
+> drafts you are assembling still sum to roughly 14 000–16 000 words combined — hitting the new target
+> means cutting substantially more than the de-duplication in Step 3 alone removes. See the
+> strengthened Step 4a below.
 
 Phase 12 then adds the summary, the decision register, and the appendices on top of the body you
 produce. Splitting it this way means you can give the body the attention it needs, and that if the
@@ -209,6 +223,27 @@ clause rather than three paragraphs.
 - Fix any sentence that reads as instructions to an agent rather than prose for a client — occasional
   phase-document language leaks into drafts.
 
+### Step 4a — Condense every section to what the decision needs (not optional)
+
+De-duplication (Step 3) removes exact repeats; this step removes elaboration that never repeated
+anywhere but still isn't needed. For every `###` subsection, keep **decision → why → what it beat →
+what it costs**, in one to three sentences each, plus any table the outline requires — and cut:
+
+- A second or third example illustrating a point the first example already made.
+- Restating a consequence that a table two lines below already states.
+- Throat-clearing sentences ("It is worth noting that...", "This is an important consideration
+  because...") that could be deleted with no loss of meaning.
+- Background explanation of a well-known AWS/Kubernetes concept beyond what a competent engineer
+  needs — this document is for someone who already knows what a VPC or a pod is; the glossary
+  (Phase 12) carries the founder-facing definitions.
+- A third or fourth rejected alternative in inline prose where two make the comparative case; the
+  full options table, if the decision has a promoted ADR, lives in Appendix B, not here too.
+
+Do **not** cut: the decision itself, its single strongest justification, what it beat, its cost or
+consequence, its Well-Architected pillar line, or anything a Step 3 overlap row still routes here.
+When in doubt, cut the explanation and keep the conclusion — a reader who wants the full reasoning for
+a given decision has the phase draft under `_plan/` and, for the nine promoted decisions, Appendix B.
+
 ### Step 5 — Read it once, end to end
 
 Before you finish, read the assembled body straight through as a reader would. You are looking for
@@ -232,7 +267,9 @@ that assumes something the previous section did not establish. Fix what you find
 - [ ] Exactly one `> **Well-Architected pillars.**` line per numbered chapter, 2–4 pillars each.
 - [ ] Every overlap in the Step 3 table resolved — one full treatment, cross-references elsewhere.
 - [ ] No acronym expanded more than once.
-- [ ] Body length 7 000–8 500 words including tables.
+- [ ] Body length 4 800–6 500 words including tables. Every outline subsection and every required
+      table is still present — the cut came from prose, not from dropping either.
+- [ ] Step 4a's condensation applied throughout, not only where Step 3 already flagged an overlap.
 - [ ] No `TODO`, `TBD`, or leftover phase-document instruction text.
 - [ ] Drafts and diagram source files unmodified.
 - [ ] The end-to-end read in Step 5 completed and anything it surfaced fixed.
@@ -242,7 +279,8 @@ that assumes something the previous section did not establish. Fix what you find
 
 | Failure | Avoid it by |
 |---|---|
-| Concatenating without editing | Steps 3 and 4 **are** the phase. |
+| Concatenating without editing | Steps 3, 4, and 4a **are** the phase. |
+| De-duplicating exact repeats but leaving every paragraph at its original length | Step 4a — condense each subsection to decision → why → what it beat → what it costs. |
 | Deleting a duplicate instead of replacing it with a cross-reference | The idea stays; the length goes. |
 | Losing the Decision Records | You exclude them; Phase 12 reads them from the drafts. Do not delete them from the drafts. |
 | Merging §8 and §9, or putting them in draft order | Growth is §8, pillars are §9. |
@@ -278,9 +316,12 @@ No web browsing.
 Build architecture/README.md — chapters §0 through §9 only — following the outline and the
 five-step procedure exactly. Leave the three HTML-comment markers in place for Phase 12.
 
-This phase is EDITING, not writing. Steps 3 and 4 — de-duplicating the twelve named overlaps and
-normalising voice and acronyms — are where the value is. An agent that concatenates the drafts and
-stops has failed this phase.
+This phase is EDITING, not writing. Steps 3, 4, and 4a — de-duplicating the twelve named overlaps,
+normalising voice and acronyms, and condensing every subsection down to decision/why/alternative/cost
+— are where the value is. The drafts sum to roughly 14,000-16,000 words combined; the target body is
+4,800-6,500, including the outline's required tables, which stay as they are — the cut comes from
+prose only. An agent that concatenates the drafts and stops, or that only removes exact repeats
+without condensing, has failed this phase.
 
 Two things that are easy to get wrong: draft 09 SPLITS into chapter 8 (growth roadmap) and
 chapter 9 (Well-Architected alignment), in that order, which is the reverse of the draft; and each

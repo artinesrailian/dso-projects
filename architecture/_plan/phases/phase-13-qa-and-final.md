@@ -57,7 +57,9 @@ dropped:
       headings, not two
 - [ ] R18 — at least one HLD, embedded, rendering, referenced in the text, and showing the tiers
 - [ ] R22 — cost has real content, with figures and levers
-- [ ] R26 — every significant decision has both inline reasoning and an ADR
+- [ ] R26 — every significant decision has inline reasoning, plus **either** a promoted Appendix B
+      ADR (the nine in `decision-register.md` §2a) **or** a row in the §10 Summary of Key Decisions
+      table — not necessarily both
 - [ ] R27 — all six pillars covered, with tags and trade-offs
 - [ ] R28 — the three-tier model is structural, not a passing mention
 
@@ -91,11 +93,14 @@ name against `contract.md` §4; every service name against `contract.md` §13.
 
 ### Pass 3 — Decision register integrity (severe if it fails)
 
-- [ ] Every ADR number in the `STATE.md` ledger appears in Appendix B, and nothing else does.
-- [ ] The register runs **ADR-001 to ADR-029** with no gaps, no duplicates, and no number outside
-      its phase's reserved block (`decision-register.md` §2). A gap means a phase under-delivered —
-      write the missing record rather than renumbering.
-- [ ] Every ADR carries every field of the template in `decision-register.md`: Status, Requirement,
+- [ ] Appendix B contains **exactly** the nine ADRs fixed in `decision-register.md` §2a — 001, 004,
+      007, 011, 017, 019, 023, 026, 029 — no more, no fewer, no substitutions. A promoted record
+      missing means a phase under-delivered — find it in that phase's draft and add it rather than
+      promoting a different number from the same block.
+- [ ] The other twenty ADR numbers (recorded in the drafts but not promoted) each have a row in §10
+      with the ADR column left as `—`. A number with neither a §10 row nor an Appendix B entry is a
+      dropped decision — add the §10 row.
+- [ ] Every promoted ADR carries every field of the template in `decision-register.md`: Status, Requirement,
       Pillars, Section, Context, Options considered, Decision, **Why this is the right choice for
       Innovate Inc.**, Consequences (Gains and Accepts), Cost impact, Revisit when.
 - [ ] Every ADR's `Section` reference matches `contract.md` §14 and points at a heading that exists.
@@ -180,7 +185,7 @@ Read as a principal engineer looking for something to object to. Check specifica
 - [ ] No emoji
 - [ ] Every table has a header and an alignment row
 - [ ] Every internal anchor resolves; the table of contents matches the headings
-- [ ] Total length 13 000–16 000 words: body §0–§10 at 7 000–8 500, Appendix B at 5 500–7 500
+- [ ] Total length 9 000–12 000 words: body §0–§10 at 4 800–6 500, Appendix B at 2 000–2 500
 - [ ] Search for and eliminate: `TODO`, `TBD`, `XXX`, `FIXME`, `???`, `<!-- EXEC-SUMMARY`, `Lorem`,
       `placeholder`, `[insert`, `TBC`, `<fill`, any heading with no body, any "see above" pointing at
       nothing, and any leftover instruction text copied from a phase document
@@ -202,8 +207,10 @@ probe with no answer is a gap — write the missing content.**
   coherent, and note it in `STATE.md`.
 - If you find a genuine gap needing more than ~200 words of new content, write it, and note in your
   report that it was added at QA rather than by its owning phase.
-- If an ADR is missing entirely for a decision that is clearly significant, write it. Use the next
-  free number in that phase's reserved block and update the `STATE.md` ledger.
+- If a decision that is clearly significant has neither a §10 row nor a promoted ADR, add a §10 row
+  for it — do **not** add a new entry to Appendix B. Appendix B is capped at the nine records fixed
+  in `decision-register.md` §2a; that cap does not change at QA. Only fix Appendix B itself if one of
+  those nine specific promoted records is missing or incomplete.
 
 ---
 
@@ -226,7 +233,8 @@ Fix what that read surfaces. This pass catches what the checklists cannot.
 - [ ] All nine audit passes run, in order, each with a recorded verdict in `STATE.md`.
 - [ ] Every R1–R28 requirement located in the README, by section number.
 - [ ] Every fact in the Pass 2 table verified identical across prose, tables, ADRs, and diagrams.
-- [ ] Decision register verified: no gaps, no duplicates, every field present, every plain-language
+- [ ] Decision register verified: exactly the nine records fixed in `decision-register.md` §2a, the
+      other twenty each present as a §10 row, every field present on the nine, every plain-language
       field readable by a non-engineer, every options table containing a fair alternative.
 - [ ] All six pillars verified, with three evidence rows spot-checked against the body.
 - [ ] Three-tier coherence verified end to end.
