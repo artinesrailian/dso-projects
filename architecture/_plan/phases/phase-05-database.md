@@ -80,7 +80,7 @@ prose:
 
 1. **Self-managed PostgreSQL on EC2** — cheapest on paper, and wrong. The team would own patching,
    failover orchestration, backup verification, PITR tooling, replication lag monitoring, and storage
-   growth. For a five-person team holding sensitive user data, the failure mode is not "expensive",
+   growth. For a small team holding sensitive user data, the failure mode is not "expensive",
    it is "the backup was never tested and the restore does not work". Reject.
 2. **PostgreSQL in Kubernetes via an operator (CloudNativePG, Zalando, CrunchyData)** — attractive
    because everything is then in one control plane, and genuinely good technology. Still rejected

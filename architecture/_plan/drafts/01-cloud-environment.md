@@ -73,8 +73,11 @@ reason, not as a template checklist filled in for its own sake.
 | `innovate-dev` | Workloads / NonProd | Development EKS cluster + Aurora. Loosest guardrails, synthetic data only. | Yes |
 | `innovate-staging` | Workloads / NonProd | Pre-production mirror of prod topology at reduced size. Release candidate gate. **No production data.** | Yes |
 | `innovate-prod` | Workloads / Prod | Production only. Tightest SCPs, change-controlled, break-glass access. | Yes |
-| `innovate-sandbox-<user>` | Sandbox | Per-engineer experimentation, hard budget cap, auto-nuke, no route to prod data. | Later |
-| `innovate-network` | Infrastructure | Split out of Shared Services once Transit Gateway / hybrid connectivity is introduced. | Later |
+
+Two further accounts are pre-planned, not built now: `innovate-sandbox-<user>`, a per-engineer
+experimentation account, once shared experimentation space in `innovate-dev` starts colliding with
+real work; and `innovate-network`, splitting network administration out of
+`innovate-shared-services` once Transit Gateway or hybrid connectivity is introduced.
 
 **`innovate-management`** holds nothing but AWS Organizations, Control Tower, consolidated
 billing, and the IAM Identity Center directory — no application workload is ever deployed here, so
@@ -247,7 +250,7 @@ without the rest of this document.
 | **Pillars** | Security · Reliability |
 | **Section** | §1.1 Why multiple accounts |
 
-**Context.** Innovate Inc. handles sensitive data with a five-person team and expects growth from
+**Context.** Innovate Inc. handles sensitive data with a small, lean team and expects growth from
 hundreds of users toward millions — the account structure chosen now is costly to change later.
 
 **Options considered.**
@@ -294,7 +297,7 @@ per-service accounts become the next boundary.
 
 **Context.** Seven accounts (ADR-004) only deliver their isolation benefit if every account starts
 from the same guardrail baseline — logging on, findings routed centrally, no forgotten default VPC.
-Innovate Inc.'s five engineers have no landing-zone experience to build it.
+Innovate Inc.'s small, lean team has no landing-zone experience to build it.
 
 **Options considered.**
 
@@ -309,8 +312,8 @@ layering Terraform on top where it does not reach.
 **Why this is the right choice for Innovate Inc.** Building a safe multi-account structure by hand
 is a project — deciding every guardrail and testing none of it can be bypassed. Control Tower does
 that work as a managed service: a new account is born already logging, scanned, and following the
-rules the team decided once. The five engineers spend their time on the product, not reinventing a
-landing zone AWS already maintains. The cost is a little flexibility — a few defaults the team
+rules the team decided once. The team spends its time on the product, not reinventing a landing
+zone AWS already maintains. The cost is a little flexibility — a few defaults the team
 cannot change — a fair trade for not building that machinery themselves.
 
 **Consequences.**

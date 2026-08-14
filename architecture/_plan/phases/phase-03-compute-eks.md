@@ -79,7 +79,7 @@ Short and non-defensive. The brief already chose Kubernetes; do not argue for it
 EKS actually removes from the team's plate (control-plane availability across three AZs, etcd
 backups, control-plane patching, certificate rotation) and what it does not (worker nodes, add-on
 versions, workload reliability — all still the team's problem). One honest sentence: Kubernetes is
-more operational surface than a five-person team strictly needs on day 1, and the reason to accept it
+more operational surface than a small team strictly needs on day 1, and the reason to accept it
 now is that the migration cost later — at the point of rapid growth — is far higher than the learning
 cost today.
 
@@ -235,7 +235,7 @@ exact template in `decision-register.md`. They must cover:
   Mode, and against plain EC2 behind a load balancer. Be honest: the brief asked for managed
   Kubernetes, but a reviewer respects an ADR that says "ECS would be less operational work for this
   workload today, and here is why Kubernetes still wins over the five-year horizon" far more than one
-  pretending Kubernetes is obviously correct for a five-person team. Fold in one-cluster-per-account.
+  pretending Kubernetes is obviously correct for a small team. Fold in one-cluster-per-account.
 - **ADR-012 — A platform managed node group alongside Karpenter, and Karpenter over the Cluster
   Autoscaler.** Two related choices in one record. The key reasoning: Karpenter cannot provision the
   node it runs on, and the Cluster Autoscaler is the more conventional, better-understood option that
