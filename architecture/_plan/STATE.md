@@ -15,7 +15,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | # | Phase | Status | Depends on | Output | ADR block |
 |---|---|---|---|---|---|
 | 00 | Pre-flight, scope & three-tier framing | `done` | — | `drafts/00-scope.md` | 001–003 |
-| 01 | Cloud environment structure | `todo` | 00 | `drafts/01-cloud-environment.md` | 004–006 |
+| 01 | Cloud environment structure | `done` | 00 | `drafts/01-cloud-environment.md` | 004–006 |
 | 02 | Network design | `todo` | 00 | `drafts/02-network.md` | 007–010 |
 | 03 | Compute platform — EKS | `todo` | 00 | `drafts/03-compute-eks.md` | 011–014 |
 | 04 | Containerization & CI/CD | `todo` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `01`
+**Next phase to run:** `02`
 
 ---
 
@@ -41,7 +41,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | Phase | Block (exact) | Numbers written | Titles |
 |---|---|---|---|
 | 00 | 001–003 | 001, 002, 003 | AWS as the Cloud Provider; Three-Tier Architecture Over Microservices or a Monolith; Managed Services First |
-| 01 | 004–006 | — | — |
+| 01 | 004–006 | 004, 005, 006 | Seven AWS Accounts Rather Than a Single Account; AWS Control Tower Rather Than Hand-Rolled AWS Organizations; IAM Identity Center Rather Than Per-Account IAM Users |
 | 02 | 007–010 | — | — |
 | 03 | 011–014 | — | — |
 | 04 | 015–018 | — | — |
@@ -103,6 +103,59 @@ cannot fill its block says so here rather than leaving a silent hole.
   well-architected.md §4 both cite `§10.7` for the accepted-trade-offs table, but contract.md §14's
   locked reference table fixes it at `§9.7 Accepted trade-offs between pillars` — the draft uses
   `§9.7` per contract.md's normative authority; logged below under Cross-phase issues for Phase 13.
+
+### Phase 01 — Cloud environment structure
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/01-cloud-environment.md` (1,511 words body excluding tables and
+  ADRs; ADR-004 – ADR-006 at 248, 243, and 250 words respectively, excluding both tables, all at or
+  under the 250-word cap)
+- Word count:     1,511 (acceptance band 1,050–1,550; drafted at 1,577, trimmed "Why multiple
+  accounts" and "Account inventory" prose to land inside the band with margin)
+- ADRs written:   ADR-004 … ADR-006
+- Pillars tagged: Security, Reliability, Operational Excellence (this phase's three ADRs and seven
+  sections draw only on these three pillars — matches the §1 attribution in `well-architected.md`
+  §1's OPS/SEC/REL demand tables, which are the only pillars that table maps to this chapter;
+  Cost Optimization is discussed as a trade-off the structure costs, not one it serves, consistent
+  with `well-architected.md` §3's own framing of "seven accounts" as leaning toward Security/
+  Reliability at the expense of Cost Optimization/Operational Excellence)
+- Key decisions:  Drafted the full section set and all three ADRs directly (not via subagent
+  fan-out) to preserve voice continuity with `00-scope.md` and contract fidelity on the single
+  shared account table; then ran three independent read-only verification passes (contract
+  fidelity, style/mechanics, ADR quality against rubric.md) via the Workflow tool and fixed every
+  finding they raised. Fixes included: naming the AWS Organization `innovate-inc` explicitly (was
+  present in `contract.md` §4 but never stated in the draft); removing a derived "$100–240/month"
+  figure in ADR-004 that multiplied the legitimate `well-architected.md` §3 figure ($25–60/month
+  per account) in a way `contract.md` §11's "do not derive new figures" rule reads as prohibited,
+  replaced with qualitative marginal-cost reasoning; de-duplicating ADR-004's options table from the
+  inline body prose per `decision-register.md` §3's explicit ban and this phase document's own
+  instruction for that exact ADR; making ADR-004's Decision field self-contained (removed a
+  positional "listed in the inventory above" reference, since Phase 12 reassembles ADRs into
+  Appendix B out of body order); shortening ADR-006's title from 9 to 8 words to satisfy
+  `decision-register.md` §1's template cap; correcting eight future/conditional-tense instances
+  ("will"/"would") to present tense per `style-guide.md` §1; and adding first-person-plural "We"
+  framing to the recommendation-bearing sentences (Recommendation in one line, the "Why multiple
+  accounts" opening, and all three ADR Decision fields), matching `style-guide.md` §1's explicit
+  rule, though `00-scope.md` itself uses "We" only once — noted as a judgment call below.
+- Assumptions:    none
+- Deferred:       VPC/subnet design is Phase 02's; this draft stays at the account/identity layer
+  per this phase document's "Common failure modes" table. Application-tier detail (Kubernetes
+  namespaces, node groups) is named only as a rejected alternative to account separation, not
+  designed here.
+- Contract additions: none
+- Notes for the next agent: (1) This draft now uses first-person-plural "We" in five places
+  (Recommendation in one line; "Why multiple accounts" opening; ADR-004/005/006 Decision fields) to
+  satisfy `style-guide.md` §1's literal rule, which is more than `00-scope.md`'s single instance —
+  both are defensible readings of the style guide; Phase 11 should pick one density and normalize
+  across all ten drafts during assembly rather than treating either as the house style by default.
+  (2) The `AGENT-PROTOCOL.md` §1 working-boundary path (`/home/artin/personal/git/opsfleet/
+  architecture/`) does not match this repository's actual path
+  (`/home/artin/personal/git/dso-projects/architecture/`) — treated as a stale path artifact from a
+  prior repo name, not a scope question; the relative boundary ("stay inside `architecture/`") is
+  what was honored. (3) The account inventory table's locked Purpose text for `innovate-shared-services`
+  starts with the bare acronym "ECR"; since that text must be reproduced verbatim per this phase's
+  acceptance criteria, the acronym is instead expanded at its first *prose* occurrence, one paragraph
+  below the table, rather than inside the table itself. (4) Did not touch the `§10.7`/`§9.7`
+  cross-phase issue Phase 00 logged — out of this phase's scope, still open for Phase 13.
 
 ---
 
