@@ -18,7 +18,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 01 | Cloud environment structure | `done` | 00 | `drafts/01-cloud-environment.md` | 004–006 |
 | 02 | Network design | `done` | 00 | `drafts/02-network.md` | 007–010 |
 | 03 | Compute platform — EKS | `done` | 00 | `drafts/03-compute-eks.md` | 011–014 |
-| 04 | Containerization & CI/CD | `todo` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
+| 04 | Containerization & CI/CD | `done` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
 | 05 | Database | `todo` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `todo` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
 | 07 | Observability & operational excellence | `todo` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `04`
+**Next phase to run:** `05`
 
 ---
 
@@ -44,7 +44,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 01 | 004–006 | 004, 005, 006 | Seven AWS Accounts Rather Than a Single Account; AWS Control Tower Rather Than Hand-Rolled AWS Organizations; IAM Identity Center Rather Than Per-Account IAM Users |
 | 02 | 007–010 | 007, 008, 009, 010 | One VPC Per Environment, No Interconnection; Three Availability Zones Rather Than Two; A Secondary CIDR in `100.64.0.0/10` for Pod Addresses; A NAT Gateway Per Availability Zone in Production, One in Non-Production |
 | 03 | 011–014 | 011, 012, 013, 014 | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
-| 04 | 015–018 | — | — |
+| 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
 | 05 | 019–022 | — | — |
 | 06 | 023–025 | — | — |
 | 07 | 026–027 | — | — |
@@ -266,6 +266,78 @@ cannot fill its block says so here rather than leaving a silent hole.
   than repeating it. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase 00 or the ADR-007/010
   Section-field issue from Phase 02 — both out of scope here, still open for Phase 13.
 
+### Phase 04 — Containerization & CI/CD
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/04-containers-cicd.md` (1,793 words body excluding tables, the one
+  code snippet, and ADRs; ADR-015 – ADR-018 at 249, 248, 244, and 248 words respectively, excluding
+  both tables, all under the 250-word cap)
+- Word count:     1,793 (acceptance band 1,200–1,800; drafted at ~1,900 across two rounds — an
+  initial draft, then a fix pass responding to three independent verification agents run via the
+  Workflow tool — trimmed to land inside the band with a small margin)
+- ADRs written:   ADR-015 … ADR-018
+- Pillars tagged: Cost Optimization, Performance Efficiency, Operational Excellence, Security,
+  Reliability, Sustainability (five of six pillars across the section's six pillar lines plus the
+  `## Decision Records` orientation line, 3–4 per line; Sustainability appears once, added to
+  ADR-015 in the fix pass, since `well-architected.md` §1 attributes CloudFront edge caching to
+  Sustainability directly and the original draft under-tagged it)
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00 and
+  03, then ran three independent read-only verification passes via the Workflow tool (contract
+  fidelity, style/mechanics, ADR quality against `rubric.md`), which raised 10 contract findings, 10
+  style findings, and 8 ADR-quality findings, and a fix pass that resolved the substantive ones.
+  Fixes of note: the illustrative Dockerfile snippet's runtime stage ran `pip install` inside a
+  distroless image, which ships no package manager — a real correctness bug, not a style issue;
+  rewrote the snippet to `pip install --prefix=/install` in the builder stage and `COPY --from`
+  the resulting tree straight into `/usr/local` in the distroless stage, and corrected the base
+  image tag from an invented `gcr.io/distroless/python3-debian12` back to `contract.md` §7's exact
+  `gcr.io/distroless/python3`; replaced three prose citations of `contract.md §7` (a planning file
+  that does not ship with the deliverable) with the actual ECR image path strings and base-image
+  values rendered inline, matching how drafts 00 and 03 cite the deliverable's own section numbers
+  rather than the plan; added the missing `> **Well-Architected pillars.**` line to `## Frontend
+  deployment path`, the only one of six top-level sections that had shipped without one; corrected
+  five instances of banned conditional tense (`would`) and two of future tense (`will`) on rejected
+  alternatives and enforcement claims, per `style-guide.md` §1's present-tense rule; removed the
+  banned word "just" from `"just in case"`; added three first-person-plural "We" instances to
+  recommendation sentences that had zero, matching the modeled voice in `style-guide.md` §1; renamed
+  the `## Deployment` heading from "GitOps with Argo CD" to "CI/CD and GitOps" to match the exact
+  subsection name `contract.md` §14 pre-registers for `§3.9`; removed an unlocked staging
+  load-testing gate from the CI pipeline table that `contract.md` §7's fixed pipeline flow does not
+  include (`00-scope.md` §5 also lists load testing as out of scope); restructured ADR-016's options
+  table to independently argue "rebuilding per environment" against its own strongest rival — same
+  digest, replicated into a per-environment registry — rather than fusing it with the per-environment
+  registry option, after a verification pass found the original table never tested the ADR against
+  that rival; corrected ADR-015's `Section` field from `§3.8 Container registry` (wrong — that ADR is
+  about not containerizing, not about the registry) to the chapter level `§3 Compute Platform`,
+  matching the precedent Phases 02 and 03 set for headings with no pre-registered subsection number;
+  added the missing "indicative" label and AWS Pricing Calculator pointer to ADR-015's `Cost impact`
+  field per `contract.md` §11's mandatory labelling rule, and removed an unlabelled derived "order of
+  magnitude" comparison; adjusted ADR-015's and ADR-016's `Requirement` fields (dropped R9 from
+  ADR-015 since the ADR's whole point is that no image is built for the SPA; dropped R19 from ADR-016
+  and added R23, since R19's owning phases in `brief.md` are 03/05/07 and R23 is this phase's own
+  declared scope); and strengthened the *Accepts* fields on ADR-015 and ADR-017, which had named the
+  fact of a second mechanism/system without naming why it costs something.
+- Assumptions:    The Argo Rollouts canary traffic-weight steps (10% → analysis → 50% → analysis →
+  100%) and the multi-arch, distroless-compatible dependency-install pattern in the Dockerfile
+  snippet are illustrative choices `contract.md` does not fix; the canary steps are genuinely needed
+  by both the body prose and the environment-promotion table, so they are registered in
+  `contract.md` §12 rather than left implicit.
+- Deferred:       Cluster topology, node groups, and autoscaling are Phase 03's territory and are not
+  restated here beyond a cross-reference to §3.3 Node strategy. Database migration mechanics beyond
+  the expand/contract pattern and the PreSync hook trigger are cross-referenced to Phase 05, not
+  designed here.
+- Contract additions: `_plan/contract.md` §12 — Argo Rollouts canary steps, `10% → analysis → 50% →
+  analysis → 100%`.
+- Notes for the next agent: (1) See Cross-phase issues below for two findings: ADR-015's `Section`
+  field citing chapter level (no pre-registered subsection for "What gets containerized"), and the
+  `style-guide.md` §5 vs. `contract.md` §13 conflict over whether "Amazon Elastic Kubernetes Service
+  (EKS)" or "Amazon EKS" is the correct first-use expansion — both drafts 03 and 04 followed
+  style-guide.md's general rule over contract.md's specific terminology lock; flagged for Phase 13,
+  not fixed here since it is a pre-existing cross-draft pattern, not a defect unique to this phase.
+  (2) Phase 05 (database) should keep citing the expand/contract migration pattern and the Argo CD
+  PreSync hook exactly as this draft states them, since `## Deployment — CI/CD and GitOps` names
+  Phase 05 as owning the storage side of that same pattern. (3) Did not touch the open `§10.7`/`§9.7`
+  issue from Phase 00, the ADR-007/010 or ADR-011 Section-field issues from Phases 02/03, or the
+  Phase 02 ADR word-count finding from Phase 03 — all out of scope here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -291,6 +363,8 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 02 | `contract.md` §11 cost table | No line item exists for interface VPC endpoint spend (16 endpoints × 3 AZs); `drafts/02-network.md` describes the per-endpoint charge qualitatively rather than deriving a total, per §11's no-derived-figures rule. | Phase 08 (Cost optimization) should add an indicative line item. |
 | Phase 03 | `drafts/03-compute-eks.md`, ADR-011 Section field | `contract.md` §14 pre-registers no subsection number for the "Why managed Kubernetes, and why EKS" content (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for this chapter); ADR-012/013 cite `§3.3` and ADR-014 cites `§3.5`, but ADR-011 cites the chapter level `§3 Compute Platform` instead, matching the precedent Phase 02 set for ADR-007/010. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
 | Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | Phase 13 should recount ADR-007 – ADR-010 against the 250-word cap (excluding the metadata and options tables) and trim if the finding holds. |
+| Phase 04 | `drafts/04-containers-cicd.md`, ADR-015 Section field | `contract.md` §14 pre-registers no subsection number for "What gets containerized" (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for the Compute Platform chapter); ADR-016 and ADR-018 correctly cite `§3.8 Container registry`, but ADR-015 (the SPA-not-a-container decision) cites the chapter level `§3 Compute Platform` instead, matching the precedent Phases 02 and 03 set for ADR-007/010 and ADR-011. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
+| Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Not fixed here since it is a pre-existing pattern shared by an earlier phase, not a defect unique to this one. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct both drafts' first-use expansions to match if `contract.md` §13 is the intended authority. |
 
 ---
 
