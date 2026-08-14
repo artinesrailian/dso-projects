@@ -22,14 +22,14 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 05 | Database | `done` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `done` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
 | 07 | Observability & operational excellence | `done` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
-| 08 | Cost optimization & FinOps | `todo` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
+| 08 | Cost optimization & FinOps | `done` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
 | 09 | Well-Architected alignment & growth roadmap | `todo` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
 | 10 | Diagrams | `todo` | 01–09 | `../diagrams/01…05` | — |
 | 11 | Body assembly | `todo` | 00–10 | `../README.md` §0–§9 | — |
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `08`
+**Next phase to run:** `09`
 
 ---
 
@@ -48,7 +48,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
 | 06 | 023–025 | 023, 024, 025 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
 | 07 | 026–027 | 026, 027 | Open-Source Observability, Managed at Scale; SLO Targets and the Error-Budget Policy |
-| 08 | 028–029 | — | — |
+| 08 | 028–029 | 028, 029 | Deferring Compute Savings Plans and Reserved Capacity; Offering the Lean-Start Variant as a Documented Option |
 
 The finished register is **ADR-001 to ADR-029, no gaps**. Counts are exact, not ranges — a phase that
 cannot fill its block says so here rather than leaving a silent hole.
@@ -579,6 +579,105 @@ cannot fill its block says so here rather than leaving a silent hole.
   word-count finding from Phase 03, or the EKS terminology conflict from Phase 04 — all out of scope
   here, still open for Phase 13.
 
+### Phase 08 — Cost optimization & FinOps
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/08-cost.md` (1,473 words body excluding tables and ADRs; ADR-028 at
+  246 and ADR-029 at 250 words, excluding both tables, both at or under the 250-word cap, counted with
+  the same whitespace-token method Phases 03, 05, 06, and 07 validated)
+- Word count:     1,473 (acceptance band 1,050–1,600; phase document's own ~1,300-word ±20% band is
+  1,040–1,560 — both satisfied). Drafted at ~1,444 across two rounds — an initial draft, then a fix
+  pass responding to three independent verification agents run via the Workflow tool — landing inside
+  both bands with margin each round.
+- ADRs written:   ADR-028 — ADR-029
+- Pillars tagged: Cost Optimization, Reliability, Operational Excellence, Performance Efficiency,
+  Sustainability across the section's five pillar lines plus the `## Decision Records` orientation
+  line (2 per line, every line at or above the 2-pillar floor); Security not tagged — this chapter's
+  own content (pricing and FinOps governance) does not substantively serve it. ADR-028's own pillar
+  metadata carries `Cost Optimization · Operational Excellence`, added during the fix pass after a
+  verification pass found it was the only one of 29 ADRs across all eight drafts with a single-pillar
+  metadata row.
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–07,
+  then ran three independent read-only verification passes via the Workflow tool (contract fidelity,
+  style/mechanics, ADR quality against `rubric.md`), which raised 2 contract findings, 6 style
+  findings, and 8 ADR-quality findings, and two further advisor-flagged findings on redraft, and a fix
+  pass that resolved them. Fixes of note: a verification pass flagged the lean-start variant's original
+  NAT row ("a single NAT Gateway for the merged non-production VPC") as inconsistent with the
+  Optimization Levers table's own row, which treats single-NAT-per-non-prod-environment as the existing
+  baseline. A first fix pass over-corrected this into "development and staging merge into one account"
+  — since an Amazon EKS cluster is scoped to exactly one AWS account (`contract.md` §6), sharing one
+  cluster does structurally imply *something* about the account boundary, but asserting the accounts
+  merge is a bigger claim than anything `contract.md` licenses: §11's lean-start note says only "share
+  one cluster", and §4 locks both `innovate-dev` and `innovate-staging` as separate Day-1 accounts —
+  "you may not change a value that is already fixed here." A second advisor pass caught the
+  over-correction (it had also propagated into ADR-029's `Gains`/`Accepts` fields) before it was
+  reported as done; reverted all three sites to state only what `contract.md` §11 actually licenses
+  (the shared cluster and the resulting one-fewer-NAT-Gateway saving) without asserting how the account
+  boundary resolves, and logged the underlying tension as an Open question below rather than silently
+  deciding it. Other fixes of note: removed five dangling `contract.md §N` citations from body prose (a
+  planning file that does not ship with the deliverable, the same defect class Phase 04 fixed for
+  `contract.md §7`) and replaced them with the deliverable's own section numbers (`§3.3 Node strategy`,
+  `§8 Growth Roadmap`, `§5.3 Data protection`, `§1.1 Why multiple accounts`); removed two figures a
+  verification pass found were derived rather than sourced — a `~$400`/`~$325` per-tier dollar
+  regrouping with no matching line in `contract.md` §11, replaced with the purely relative language the
+  phase document's own content specification already called for ("largest variable cost", "small at
+  launch"), and a "roughly two-thirds" fraction for the scheduled-dev-shutdown lever with no contract
+  source, replaced with "most"; fixed ADR-028's Cost impact field, which had inverted a 30%-discount
+  into a "30% higher" premium — mathematically wrong (reversing a 30%-off price is closer to 43%
+  higher) and not something `contract.md` §11 states either way — reworded to state the forgone
+  discount directly, in the contract's own terms, with no reverse arithmetic; resolved a cross-section
+  contradiction a verification pass found between the Optimization Levers table's
+  Aurora-reserved-capacity trigger ("a full quarter") and ADR-028's own trigger ("two consecutive
+  quarters") by pointing the lever row at ADR-028's trigger instead of stating an independent one;
+  expanded ADR-028's Context field from one technical sentence to include Innovate Inc.'s team size and
+  runway, per `decision-register.md` §1's template requirement that Context frame the client's actual
+  constraints, not abstract ones; rewrote both ADRs' `Accepts` fields, which had restated their own
+  options-table Weaknesses cells nearly verbatim, with genuinely new, contract-safe consequences (an
+  open-ended deferral with no fixed end date for ADR-028; lost operational isolation between the
+  development and staging workloads sharing one cluster for ADR-029, stated without asserting an
+  account merge); replaced a vague "where budget is tight" trigger in ADR-029's plain-language field
+  with a concrete one ("while runway is short"), and replaced a derived "≈$450/month difference" in its
+  `Revisit when` field (subtraction on two `contract.md` §11 figures, which the phase document's hard
+  rule forbids) with a qualitative business trigger; replaced jargon — "a green staging deployment" —
+  in ADR-029's plain-language field with "a staging deployment that has passed every check", per
+  `style-guide.md` §6a's read-aloud test; added an AWS Pricing Calculator pointer to the
+  growth-trajectory table, the one of the three required figure tables that had shipped without one;
+  fixed a British/American spelling split (`behaviour`/`stabilise` vs. `utilization`) to American
+  throughout; and expanded `EKS`, `NAT`, `ALB`, `AMP`/`AMG`, and `VPC` at their true first prose use,
+  leaving the three-acronym-in-table exceptions (`ECR`, `ACU`, `LCU` inside the verbatim-reproduced
+  day-1 cost table) unexpanded as a deliberate, precedented judgment call — the same one Phase 03 made
+  for `EKS` inside a locked table — since editing that table's cells would break this phase's own
+  "reproduce ... exactly" requirement.
+- Assumptions:    Read `contract.md` §11's lean-start note ("single NAT everywhere") together with this
+  phase document's own explicit, narrower instruction ("a single NAT Gateway in every non-production
+  VPC") as the phase document's scope winning for content purposes — i.e., the lean-start variant does
+  not touch production's three-AZ NAT redundancy, which `well-architected.md` §3's own trade-off table
+  treats as a standing decision, not one this variant revisits. A verification pass raised the
+  alternative reading (reducing production to one NAT Gateway); rejected it as inconsistent with every
+  other locked reference to production's NAT posture in the document, and not something a "lean-start"
+  variant scoped to non-production levers should silently redesign. Left unresolved, and logged as an
+  Open question rather than assumed: whether "development and staging share one EKS cluster"
+  (`contract.md` §11) is compatible with §4's separate `innovate-dev`/`innovate-staging` accounts,
+  given §6 scopes one cluster to exactly one account.
+- Deferred:       No new infrastructure decisions — this phase prices and governs the design Phases
+  01–07 made. The observability stack's cost split (in-cluster vs. managed Prometheus/Grafana) that
+  Phase 07 flagged is covered by the existing `CloudWatch / logs / metrics` line and named qualitatively
+  in `## Optimization levers`'s day-1-vs-at-scale framing, not split into a new line item `contract.md`
+  §11 does not carry.
+- Contract additions: none.
+- Notes for the next agent: (1) Logged two new Cross-phase issues below: a fourth draft (`08-cost.md`)
+  on the style-guide.md-over-contract.md side of the EKS-expansion split Phase 04 first flagged, and a
+  new pillar trade-off (deferring Compute Savings Plans) for Phase 09 to add to its `§9.7` table — not
+  editing `well-architected.md` directly since it is not a file this phase owns. (2) Resolved the
+  open Phase 02 cross-phase row (interface VPC endpoint cost line) qualitatively rather than by adding
+  a new dollar figure — see the updated "Resolved in" cell. (3) Raised a new Open question above (the
+  shared dev/staging EKS cluster vs. the locked separate accounts) — a human answer, or a `contract.md`
+  §12 extension once one is chosen, would let a later phase state the lean-start variant's account
+  mechanics plainly instead of the deliberately mechanism-agnostic wording this draft uses now. (4) Did
+  not touch the open `§10.7`/`§9.7` issue from Phase 00, the ADR-007/010, ADR-011, ADR-015, or ADR-020
+  Section-field issues from Phases 02–05, the Phase 02 ADR word-count finding from Phase 03, or the
+  pre-existing EKS terminology conflict itself (only added this draft to the tally) — all out of scope
+  here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -588,7 +687,7 @@ cannot fill its block says so here rather than leaving a silent hole.
 
 | Raised by | Question | Status | Answer |
 |---|---|---|---|
-| — | — | — | — |
+| Phase 08 | `contract.md` §11's lean-start note says "Dev+staging share one cluster." `contract.md` §4 locks `innovate-dev` and `innovate-staging` as two separate Day-1 accounts. `contract.md` §6 fixes "Clusters per account: Exactly one. Account is the isolation boundary, not the cluster." Sharing one EKS cluster across two accounts is not a configuration EKS supports, so §11's lean-start note and §4/§6's account lock appear to be in tension. `drafts/08-cost.md` states only what §11 licenses (the shared cluster, and the NAT Gateway saving that follows) and does not assert whether the two accounts merge, split differently, or whether §11's note is a simplification that assumes the reader will not press on the mechanism. | Open | — |
 
 ---
 
@@ -601,13 +700,15 @@ cannot fill its block says so here rather than leaving a silent hole.
 |---|---|---|---|
 | Phase 00 | `phases/phase-00-preflight-and-scope.md` §3 closing line and `well-architected.md` §4 both say the accepted-trade-offs table lives at `§10.7`, but `contract.md` §14's locked section map and reference table fix it at `§9.7 Accepted trade-offs between pillars` (there is no `§10.7` — `§10` is `Summary of Key Decisions`). `00-scope.md` §3 cites `§9.7`, following contract.md as normative. | Phase 13 should correct the stale `§10.7` references in the two source docs, or confirm `§9.7` is the intended target. |
 | Phase 02 | `drafts/02-network.md`, ADR-007 and ADR-010 Section fields | `contract.md` §14 pre-registers only `§2.2` and `§2.4` for the Network Design chapter; ADR-008/009 cite `§2.2`, but ADR-007 ("Connectivity between environments...") and ADR-010 ("Routing and internet egress") have no pre-registered subsection number, so both cite the chapter level `§2 Network Design` instead. | Phase 11 should assign subsection numbers to those two headings during assembly and update the two ADR Section fields to match, if it numbers them. |
-| Phase 02 | `contract.md` §11 cost table | No line item exists for interface VPC endpoint spend (16 endpoints × 3 AZs); `drafts/02-network.md` describes the per-endpoint charge qualitatively rather than deriving a total, per §11's no-derived-figures rule. | Phase 08 (Cost optimization) should add an indicative line item. |
+| Phase 02 | `contract.md` §11 cost table | No line item exists for interface VPC endpoint spend (16 endpoints × 3 AZs); `drafts/02-network.md` describes the per-endpoint charge qualitatively rather than deriving a total, per §11's no-derived-figures rule. | **Resolved in Phase 08.** `contract.md` §11's hard rule ("invent nothing", "no derived figures beyond simple totals already in the contract") forbids adding a new dollar line contract.md itself doesn't carry, so `drafts/08-cost.md`'s "VPC endpoints reducing NAT data processing" lever states the trade-off qualitatively (a per-endpoint fixed charge that offsets most of what it saves on the NAT Gateways line) rather than deriving a total — no new figure was invented. |
 | Phase 03 | `drafts/03-compute-eks.md`, ADR-011 Section field | `contract.md` §14 pre-registers no subsection number for the "Why managed Kubernetes, and why EKS" content (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for this chapter); ADR-012/013 cite `§3.3` and ADR-014 cites `§3.5`, but ADR-011 cites the chapter level `§3 Compute Platform` instead, matching the precedent Phase 02 set for ADR-007/010. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
 | Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | Phase 13 should recount ADR-007 – ADR-010 against the 250-word cap (excluding the metadata and options tables) and trim if the finding holds. |
 | Phase 04 | `drafts/04-containers-cicd.md`, ADR-015 Section field | `contract.md` §14 pre-registers no subsection number for "What gets containerized" (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for the Compute Platform chapter); ADR-016 and ADR-018 correctly cite `§3.8 Container registry`, but ADR-015 (the SPA-not-a-container decision) cites the chapter level `§3 Compute Platform` instead, matching the precedent Phases 02 and 03 set for ADR-007/010 and ADR-011. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
 | Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Draft 06 (this phase) took the other side, following `contract.md` §13's literal "Amazon EKS" — so the split is no longer unanimous. Not fixed here since it is a pre-existing pattern shared by earlier phases, not a defect unique to any one of them. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct whichever draft(s) don't match the intended authority — now three drafts to reconcile, not two. |
 | Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | Phase 11 should assign a subsection number to `## Configuration` during assembly and update ADR-020's Section field to match, if it numbers it. |
 | Phase 06 | `contract.md` §14 vs. `phases/phase-11-assembly.md` | Phases 02–05 each logged a "no pre-registered subsection number" issue for one or two ADRs' Section fields, reasoning from `contract.md` §14's short "most-cited" reference table alone. While resolving this phase's own ADR Section fields (`contract.md` §14 names `phase-11-assembly.md` as the authority for subsection numbering), it turned out that file already contains the **complete** subsection outline for every chapter, §0 through §9. Concretely: `§2.3 Routing, egress and private connectivity` appears to cover both ADR-007's topic (connectivity between environments) and ADR-010's topic (NAT Gateways/egress), which draft 02 splits across two `##` headings; `§3.1 Why Amazon EKS` matches ADR-011's topic directly; `§4.2 Configuration and connection management` matches ADR-020's topic directly. ADR-015 (SPA not containerized) is less clear-cut — draft 04's opening heading is "What gets containerized — and what does not," and no `phase-11-assembly.md` heading matches that wording exactly; the nearest candidates are `§3.1` or `§3.7 Containerization — image building`, but this needs a content read, not just a title match. Not fixed here — none of these are this phase's files. | Phase 13 should re-open the ADR-007/010, ADR-011, ADR-015, and ADR-020 Section-field entries above against `phase-11-assembly.md`'s outline directly (not `contract.md` §14's shorter table) and correct each ADR's Section field to its real subsection number, resolving ADR-015's ambiguous case by reading draft 04's content against the outline. |
+| Phase 08 | `drafts/08-cost.md` §1, first-use expansion of Amazon EKS | Same split Phase 04 logged between `style-guide.md` §5's general worked example ("Amazon Elastic Kubernetes Service (EKS)") and `contract.md` §13's literal lock ("Amazon EKS (first use), then 'EKS'"). This draft's first EKS expansion follows style-guide.md's fuller form, matching drafts 03 and 04; draft 06 is still the lone holdout on contract.md §13's literal form. Not fixed here — this is the same pre-existing pattern, not a new defect. | Now four drafts to reconcile (03, 04, 08 on one side; 06 on the other) once Phase 13 decides which normative file wins. |
+| Phase 08 | `well-architected.md` §3 trade-off table | This phase's ADR-028 (deferring Compute Savings Plans and reserved Aurora capacity until the baseline stabilizes) is a pillar trade-off `well-architected.md` §3's table does not yet list: it leans toward **Operational Excellence and reduced commitment risk** at the expense of a larger **Cost Optimization** discount captured sooner. Not added to `well-architected.md` directly — that file is not in this phase's "Files you own" list, and §3 itself says content phases should flag new trade-offs for Phase 09 to pick up, not edit the file. | Phase 09 (Well-Architected alignment) should add a row: "Deferring Compute Savings Plans to a stable baseline \| Operational Excellence, reduced commitment risk \| A larger, sooner Cost Optimization discount \| A wasted 12-month commitment against a moving architecture costs more than the ~30% discount it would have captured." |
 
 ---
 
