@@ -10,12 +10,23 @@ architecture document; they have received a shopping list.
 So every significant decision is recorded twice, on purpose:
 
 1. **Inline**, in the body section where it belongs, argued in prose.
-2. **As a numbered Architecture Decision Record (ADR)** in a register that appears as an appendix of
-   the final document.
+2. **Either as a numbered Architecture Decision Record (ADR)** in Appendix B, **or as a row** in the
+   Summary of Key Decisions table (§10) — see the promotion rule in §2a below. Every decision gets one
+   of the two; the nine most consequential get both a table row and a full ADR.
 
 The duplication is deliberate and it is not padding. The inline prose carries a reader who is going
-through the document in order; the register lets a reviewer scan every decision and its reasoning in
-two minutes without reading 7 000 words. They are written differently — see §3.
+through the document in order; the register lets a reviewer scan the decisions that matter most, and
+their reasoning, in two minutes without reading the whole body. They are written differently — see §3.
+
+> **Amendment, 2026-08-14.** This file originally specified a full ADR for all 29 records phases
+> 00–08 wrote. Appendix B in the graded deliverable now promotes only nine of them — see §2a. All 29
+> records still exist, unchanged, in `_plan/drafts/00-scope.md` through `08-cost.md`; nothing already
+> written was deleted. This changes what Phase 12 assembles into `README.md`, not what phases 00–08
+> produced. Rationale: at 29 full records the appendix alone ran 5,500–7,500 words against a body of
+> similar size, for a brief that asks for one README with justified decisions, not an audit-grade
+> register. R26 ("every decision is justified... in language the client can follow") does not require
+> a formal ADR per decision — inline prose plus a Summary of Key Decisions row satisfies it, and both
+> survive for every decision either way.
 
 ---
 
@@ -142,32 +153,58 @@ ADR-001 to ADR-029 with no gaps. If a phase genuinely cannot fill its block, it 
 | 07 | ADR-026 – ADR-027 | 2 | The observability stack and its day-1 versus at-scale split; SLO targets and the error-budget policy |
 | 08 | ADR-028 – ADR-029 | 2 | Deferring commitment discounts until the baseline stabilises; the lean-start variant as a documented option |
 
-**Total: 29 ADRs.** Phase 11 assembles the body; Phase 12 consolidates the records into Appendix B in
-numeric order; Phase 13 verifies there are no gaps, no duplicates, and no number outside its block.
+**Total written across the drafts: 29 ADRs**, all completed by phases 00–08 — see `STATE.md`'s ADR
+ledger. They remain in the drafts as the full audit trail. Phase 11 assembles the body; Phase 12
+promotes **nine of the 29** into Appendix B (§2a); Phase 13 verifies the promoted nine are correct and
+complete, and that every one of the other twenty has a row in the Summary of Key Decisions table.
+
+### §2a — Appendix B promotion: one ADR per content phase
+
+Appendix B carries **exactly one ADR per content phase (00–08) — nine records, ADR numbers fixed
+below** — rather than all 29. Each is that phase's single most consequential, hardest-to-reverse
+decision, weighted toward the ones the brief itself asks to be justified (`brief.md` R1/R2, R12) and
+the ones a mistake would be most expensive to walk back.
+
+| Phase | Promoted | Title | Why this one |
+|---|---|---|---|
+| 00 | **ADR-001** | AWS as the Cloud Provider | The most foundational choice in the document; everything else assumes it |
+| 01 | **ADR-004** | Seven AWS Accounts Rather Than a Single Account | The brief's explicit "justify the account count" ask (R1, R2) |
+| 02 | **ADR-007** | One VPC Per Environment, No Interconnection | The load-bearing network-isolation decision behind "secure the network" (R3, R4) |
+| 03 | **ADR-011** | Amazon EKS as the Compute Platform | The brief's explicit "leverage Kubernetes Service" ask (R5) |
+| 04 | **ADR-017** | GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD | The hardest of the three containerization/deployment sub-asks to reverse once adopted (R11) |
+| 05 | **ADR-019** | Amazon Aurora PostgreSQL Over Self-Managed and RDS | The brief's explicit "recommend the database service and justify it" ask (R12) |
+| 06 | **ADR-023** | Customer-Managed KMS Keys Rather Than AWS-Managed Keys | The most consequential data-protection call, given the brief's "sensitive user data" emphasis (R21) |
+| 07 | **ADR-026** | Open-Source Observability, Managed at Scale | A stack choice, unlike the SLO numbers in ADR-027, which is genuinely expensive to change later |
+| 08 | **ADR-029** | Offering the Lean-Start Variant as a Documented Option | The decision most directly answering "cost-effective" (R22) for a founder reading the summary |
+
+The other twenty (002, 003, 005, 006, 008, 009, 010, 012, 013, 014, 015, 016, 018, 020, 021, 022,
+024, 025, 027, 028) are **not** demoted or dropped — they stay exactly as written in their phase's
+draft, which remains available under `_plan/` as the full design record. In the graded deliverable
+they surface as a row in the Summary of Key Decisions table (§10) instead of a full Appendix B entry.
+Phase 12 does not re-derive this table; use it as given.
 
 ### Length cap — read this before writing
 
 **No ADR exceeds 250 words** (excluding its metadata table and its options table). Most should be
-shorter; a simple decision deserves a short record. The register's value is that a reviewer can scan
-all 29 in ten minutes — a 400-word record defeats that, and padding a thin decision to look
-substantial is worse than a three-sentence record that is obviously complete.
+shorter; a simple decision deserves a short record.
 
-At 29 records this puts Appendix B at roughly 5 500–7 500 words against a body of 7 000–8 500. That
-ratio is deliberate: the body is read start to finish, the appendix is a **reference** with an index
-at the top, and a reader consults only the records they care about.
+At nine records, Appendix B runs roughly 2 000–2 500 words against a body of 4 800–6 500. That ratio
+is deliberate: the body is read start to finish, the appendix is a **reference** with an index at the
+top, and a reader consults only the records they care about — nine is short enough to read start to
+finish too, which 29 was not.
 
 ### Where the other decisions go
 
-29 records do not cover every choice in the document, and they are not meant to. Smaller decisions
-are justified **inline** where they are made, and every decision — large or small — appears as a row
-in the *Summary of Key Decisions* table that Phase 12 builds. Between the three mechanisms, no
-decision in this design is left unexplained:
+Nine full records do not cover every choice in the document, and they are not meant to. Every
+decision — large or small, promoted or not — is justified **inline** where it is made, and every
+decision also appears as a row in the *Summary of Key Decisions* table that Phase 12 builds. Between
+the three mechanisms, no decision in this design is left unexplained:
 
 | Mechanism | Covers | Depth |
 |---|---|---|
 | Inline prose | Every decision | Decision → why → what it beat → what it costs |
 | Summary of Key Decisions table | Every significant decision | One scannable row each |
-| Appendix B — the 29 ADRs | The consequential ones | Full context, options, plain-language justification, consequences, revisit trigger |
+| Appendix B — the nine promoted ADRs | The most consequential ones (§2a) | Full context, options, plain-language justification, consequences, revisit trigger |
 
 Each content phase writes its ADRs into its **own draft file**, in a final section titled
 `## Decision Records`, using the exact template above. Do not write into another phase's file, and do

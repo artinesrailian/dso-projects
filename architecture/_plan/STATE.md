@@ -33,24 +33,72 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 
 ---
 
+## Plan amendments
+
+> Changes to the normative plan itself, made by the human directing this work rather than by a phase
+> agent. Read this before starting Phase 09 or later — the rules below differ from what phases 00–08
+> were written against.
+
+### 2026-08-14 — Leaning down the assembled deliverable
+
+Phases 00–08 (all `done`) were written against the original plan and are **unchanged** — all 29 ADRs
+they wrote stay exactly as written in `_plan/drafts/`. What changed is how much of that gets promoted
+into the graded `README.md` that Phases 11–12 assemble:
+
+- **Appendix B now promotes nine ADRs, not 29** — one per content phase 00–08, fixed in
+  `decision-register.md` §2a: **001, 004, 007, 011, 017, 019, 023, 026, 029.** The other twenty stay
+  in their drafts and surface in the deliverable as a row in the §10 Summary of Key Decisions table
+  instead of a full record — that table grows from 20–26 rows to **29–34** to carry all of them (see
+  Phase 12 Step 2).
+- **Phase 09's word budget** cut from ~1,400 to ~900 words. Scope unchanged — all six pillars and the
+  full growth roadmap are still required, written tighter.
+- **Phase 11's body target** cut from 7,000–8,500 to **4,800–6,500** words. Phase 11 now has an added
+  Step 4a instructing active condensation, not just de-duplication of exact repeats. The outline (every
+  `###` subsection, every required table) is unchanged — the cut is prose only, so it doesn't collide
+  with `contract.md` §14's locked section map. (An earlier pass at this amendment targeted
+  3,500–4,500; raised to 4,800–6,500 after estimating the outline's own required tables at
+  1,800–2,500 words, which made the tighter number arithmetically incompatible with keeping every
+  subsection and table intact.)
+- **Total document target** cut from 13,000–16,000 to **9,000–12,000** words. Updated correspondingly
+  in `style-guide.md` §6, `rubric.md` §1/§2.B/§4, and Phase 13's Pass 3 and Pass 8.
+- **Phase 13 Pass 1 (R26) and its Fixing rules** updated so QA doesn't re-promote the twenty
+  non-promoted ADRs into Appendix B while checking requirement coverage — R26 is satisfied by inline
+  reasoning plus *either* a promoted ADR *or* a §10 row, and a missing-ADR gap at QA gets fixed as a
+  §10 row, not a new Appendix B entry.
+
+**Rationale:** the client brief (`docs/assessment.md`) is a four-area, one-README ask with no
+literal requirement for a 29-entry ADR register or a 15,000-word document. `brief.md` R26 ("every
+decision is justified... in language the client can follow") does not require a formal ADR per
+decision — inline prose plus a Summary of Key Decisions row satisfies it, and both still exist for
+all 29. Nothing in `brief.md`'s R1–R28 register changed or is now unmet by this cut.
+
+**Scope of this change:** forward-looking only. Drafts 00–08 were not rewritten and their content,
+word counts, and ADRs are untouched. Phases 09–13 run under the amended rules above.
+
+---
+
 ## ADR ledger
 
 Filled in by each phase as it completes, so Phase 12 can assemble the register in order and Phase 13
-can check for gaps and duplicates. Record the numbers you **actually wrote**.
+can check for gaps and duplicates. Record the numbers you **actually wrote**. The **Promoted** column
+marks which one of each phase's numbers Phase 12 copies into Appendix B, per `decision-register.md`
+§2a — added 2026-08-14, see *Plan amendments* above.
 
-| Phase | Block (exact) | Numbers written | Titles |
-|---|---|---|---|
-| 00 | 001–003 | 001, 002, 003 | AWS as the Cloud Provider; Three-Tier Architecture Over Microservices or a Monolith; Managed Services First |
-| 01 | 004–006 | 004, 005, 006 | Seven AWS Accounts Rather Than a Single Account; AWS Control Tower Rather Than Hand-Rolled AWS Organizations; IAM Identity Center Rather Than Per-Account IAM Users |
-| 02 | 007–010 | 007, 008, 009, 010 | One VPC Per Environment, No Interconnection; Three Availability Zones Rather Than Two; A Secondary CIDR in `100.64.0.0/10` for Pod Addresses; A NAT Gateway Per Availability Zone in Production, One in Non-Production |
-| 03 | 011–014 | 011, 012, 013, 014 | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
-| 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
-| 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
-| 06 | 023–025 | 023, 024, 025 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
-| 07 | 026–027 | 026, 027 | Open-Source Observability, Managed at Scale; SLO Targets and the Error-Budget Policy |
-| 08 | 028–029 | 028, 029 | Deferring Compute Savings Plans and Reserved Capacity; Offering the Lean-Start Variant as a Documented Option |
+| Phase | Block (exact) | Numbers written | Promoted | Titles |
+|---|---|---|---|---|
+| 00 | 001–003 | 001, 002, 003 | **001** | AWS as the Cloud Provider; Three-Tier Architecture Over Microservices or a Monolith; Managed Services First |
+| 01 | 004–006 | 004, 005, 006 | **004** | Seven AWS Accounts Rather Than a Single Account; AWS Control Tower Rather Than Hand-Rolled AWS Organizations; IAM Identity Center Rather Than Per-Account IAM Users |
+| 02 | 007–010 | 007, 008, 009, 010 | **007** | One VPC Per Environment, No Interconnection; Three Availability Zones Rather Than Two; A Secondary CIDR in `100.64.0.0/10` for Pod Addresses; A NAT Gateway Per Availability Zone in Production, One in Non-Production |
+| 03 | 011–014 | 011, 012, 013, 014 | **011** | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
+| 04 | 015–018 | 015, 016, 017, 018 | **017** | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
+| 05 | 019–022 | 019, 020, 021, 022 | **019** | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
+| 06 | 023–025 | 023, 024, 025 | **023** | Customer-Managed KMS Keys Rather Than AWS-Managed Keys; Centralized Immutable Logging in a Separate Account; Deferring a Service Mesh and Its Mutual TLS |
+| 07 | 026–027 | 026, 027 | **026** | Open-Source Observability, Managed at Scale; SLO Targets and the Error-Budget Policy |
+| 08 | 028–029 | 028, 029 | **029** | Deferring Compute Savings Plans and Reserved Capacity; Offering the Lean-Start Variant as a Documented Option |
 
-The finished register is **ADR-001 to ADR-029, no gaps**. Counts are exact, not ranges — a phase that
+The finished register, across all nine drafts, is **ADR-001 to ADR-029, no gaps** — Phase 13 checks
+this in the drafts. **Appendix B in the graded deliverable carries only the nine bolded numbers
+above**; the other twenty each need a row in §10 instead. Counts are exact, not ranges — a phase that
 cannot fill its block says so here rather than leaving a silent hole.
 
 ---

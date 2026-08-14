@@ -128,7 +128,10 @@ recommendation is.
 Inline, every design decision follows: **decision → why → what it beat → what it costs.**
 Additionally, every *significant* decision gets a numbered Architecture Decision Record in your
 draft's final `## Decision Records` section, using the exact template in `decision-register.md`,
-drawn from your reserved number block.
+drawn from your reserved number block. (This applies unchanged to content phases 00–08. From Phase
+12 onward, only nine of these 29 records are promoted into the final Appendix B — see
+`decision-register.md` §2a — but every phase still writes its full block; the promotion happens at
+assembly, not at content-writing time.)
 
 Read `decision-register.md` §4 before you write a single justification. Three tests: **specific**
 (names the mechanism and the number), **comparative** (states what it beat), and **client-relevant**
