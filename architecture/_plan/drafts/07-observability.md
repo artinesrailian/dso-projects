@@ -64,8 +64,8 @@ line, not a free byproduct of running the application.
 ## Service level objectives
 
 A service level objective (SLO) converts "is this bad?" from a debate into a number the team agreed
-on in advance — the single most useful thing a five-person team with no dedicated site reliability
-engineer can do to stop three people arguing about severity while a system is actually degraded.
+on in advance — the single most useful thing a small team with no dedicated site reliability engineer
+can do to stop people arguing about severity while a system is actually degraded.
 
 > **Well-Architected pillars.** Operational Excellence · Reliability
 
@@ -104,7 +104,7 @@ that week — the opposite of what an alert is for. Alerts route from Prometheus
 CloudWatch Alarms through Amazon Simple Notification Service (SNS) to PagerDuty and Slack, with
 severity tiers deciding what pages immediately and what waits for the next working morning.
 
-The honest constraint that shapes this whole section: a five-person team can sustain a very short
+The honest constraint that shapes this whole section: a small team can sustain only a very short
 page-worthy list. An alert that pages and is not actionable gets muted within two weeks by whoever is
 tired of it, and a muted alert is worse than no alert at all — it creates the false confidence that
 someone is watching when no one is. The paging list stays limited to the handful of conditions that
@@ -158,9 +158,9 @@ reader can follow without the rest of this document.
 | **Pillars** | Operational Excellence · Reliability · Cost Optimization |
 | **Section** | §6.2 The four signals |
 
-**Context.** Innovate Inc. has five engineers, no dedicated site reliability function, and a target of
-millions of users from a few hundred today. The stack must stay affordable and not fail during an
-incident.
+**Context.** Innovate Inc. has a small engineering team, no dedicated site reliability function, and a
+target of millions of users from a few hundred today. The stack must stay affordable and not fail
+during an incident.
 
 **Options considered.**
 
@@ -203,16 +203,16 @@ watches, or an on-call rotation is staffed.
 | **Pillars** | Operational Excellence · Reliability |
 | **Section** | §6.3 Service level objectives |
 
-**Context.** Innovate Inc. has five engineers, no dedicated site reliability function, and a growth
-target of millions from a few hundred users. The team needs one shared definition of "good enough" to
-act on.
+**Context.** Innovate Inc. has a small engineering team, no dedicated site reliability function, and a
+growth target of millions from a few hundred users. The team needs one shared definition of "good
+enough" to act on.
 
 **Options considered.**
 
 | Option | Strengths | Weaknesses | Verdict |
 |---|---|---|---|
 | No formal SLO, alert on ad-hoc thresholds only | Nothing to define or agree on up front | Every incident starts with an argument about whether it is bad enough to page or ship around; the bar moves with whoever is on call that day | Rejected — the exact ambiguity an SLO exists to remove |
-| 99.99% availability ("four nines") from launch | The strongest customer-facing promise available | About 52 minutes of downtime a year, demanding multi-region active-active infrastructure and extensive chaos testing this five-person team cannot yet carry, for traffic that does not yet justify it | Rejected — the cost of the extra nines lands entirely on a team too small to carry it |
+| 99.99% availability ("four nines") from launch | The strongest customer-facing promise available | About 52 minutes of downtime a year, demanding multi-region active-active infrastructure and extensive chaos testing this small team cannot yet carry, for traffic that does not yet justify it | Rejected — the cost of the extra nines lands entirely on a team too small to carry it |
 | Error budget as a reporting signal only, human call at breach | No automatic disruption to the roadmap; the decision stays with whoever has business context that day | The freeze becomes negotiable exactly when it is inconvenient, reintroducing the same mid-incident argument the SLO exists to end | Rejected — an automatic rule is the only version that holds up when it is actually tested |
 | 99.9% at launch, rising to 99.95% once proven, with an automatic feature freeze on budget burn | Matches what a single-region, multi-AZ design with automatic failover can honestly deliver; the automatic freeze holds even under deadline pressure | A visibly less ambitious availability number than "four nines" without the context of team size and stage | **Chosen** |
 

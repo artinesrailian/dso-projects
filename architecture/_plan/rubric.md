@@ -55,7 +55,7 @@ Each is scored `weak` / `adequate` / `strong`. Phase 13 must reach `strong` on e
       non-engineer and connects the decision to a business consequence.
 - [ ] Every ADR names real consequences it accepts, not only benefits.
 - [ ] Every ADR has an observable revisit trigger.
-- [ ] Reasoning is tied to Innovate Inc.'s specifics — a five-person team, sensitive data, a
+- [ ] Reasoning is tied to Innovate Inc.'s specifics — a small, lean team, sensitive data, a
       hundreds-to-millions growth curve — not to generic best practice.
 - [ ] Nothing is justified purely by "AWS recommends it".
 
@@ -111,7 +111,7 @@ Each is scored `weak` / `adequate` / `strong`. Phase 13 must reach `strong` on e
 - [ ] Cost projected across growth stages, with the shape of the curve explained.
 - [ ] At least ten optimization levers, each with its trade-off.
 - [ ] Cost governance is mechanised — tagging enforced, budgets, anomaly detection, attribution.
-- [ ] The day-1 design is something five engineers can actually run.
+- [ ] The day-1 design is something a small team can actually run.
 - [ ] Complexity that only pays off at scale is deferred to an explicit growth roadmap, and the
       roadmap says *what triggers* each step.
 

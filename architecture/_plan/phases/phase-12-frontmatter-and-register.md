@@ -89,7 +89,7 @@ for a reader who may read nothing else — a founder, or a reviewer skimming.
    (accounts, address plan, cluster topology, database engine) and what changes (replicas, caching,
    regions).
 8. **What is deliberately not built yet** — one sentence naming multi-region active-active, a service
-   mesh, and Shield Advanced, with the reason: complexity a five-person team cannot yet operate.
+   mesh, and Shield Advanced, with the reason: complexity a small team cannot yet operate.
 
 No jargon the document has not yet expanded. A non-engineer should finish this section knowing the
 shape of the answer and why it was chosen. This is the single most-read part of the deliverable —

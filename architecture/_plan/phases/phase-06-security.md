@@ -109,7 +109,7 @@ Only what Phase 01 did not cover:
   IAM Access Analyzer's unused-access findings and CloudTrail evidence. Permission boundaries on any
   role that can create roles, so privilege escalation via IAM is closed.
 - **Production access model**: read-only by default, elevated access requested and time-boxed, every
-  session logged. Note that at a five-person startup this is a lightweight process, and that the
+  session logged. Note that at a small, lean startup this is a lightweight process, and that the
   reason to build it now is that retrofitting it after a compliance audit is far more disruptive.
 - **Break-glass**: two root-credential procedures, hardware MFA, sealed, alarmed on use, tested twice
   a year.

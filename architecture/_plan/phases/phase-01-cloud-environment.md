@@ -16,7 +16,7 @@ why is that the right number?** The brief asks specifically for justification ag
 
 This is the section most candidates under-write. "Use separate accounts per environment" is the
 obvious answer; the value is in the argument, the guardrails, and the honest accounting of what the
-structure costs a five-person team.
+structure costs a small team.
 
 ---
 
