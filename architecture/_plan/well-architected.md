@@ -14,7 +14,7 @@ two things:
 ## 1. The six pillars, and what each one demands of *this* design
 
 Do not write generic pillar descriptions into the deliverable. These are the pillar demands as they
-apply to Innovate Inc. specifically — a five-person startup, sensitive user data, a
+apply to Innovate Inc. specifically — a small, lean startup, sensitive user data, a
 hundreds-to-millions growth curve, CI/CD from day one.
 
 ### OPS — Operational Excellence
@@ -27,7 +27,7 @@ hundreds-to-millions growth curve, CI/CD from day one.
 | Small, frequent, reversible deployments | §3 (canary via Argo Rollouts, `git revert` rollback) |
 | Observability that answers "are users being served", not just "is the box up" | §6 (SLOs, RED metrics, traces, synthetics) |
 | Runbooks attached to every alert; failures rehearsed, not improvised | §5 (incident response), §4 (DR drills) |
-| Operational burden sized to a five-person team | Everywhere — this is the binding constraint |
+| Operational burden sized to a small team | Everywhere — this is the binding constraint |
 
 ### SEC — Security
 

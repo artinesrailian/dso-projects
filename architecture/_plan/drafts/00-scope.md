@@ -24,7 +24,7 @@ sensitive data will need, and the size of the hiring pool a growing startup can 
 full comparison is recorded in ADR-001.
 
 The design's guiding principle is managed services first: the hardest constraint here is not the
-monthly bill but a five-person team's operational capacity, and every hour spent operating a
+monthly bill but a small team's operational capacity, and every hour spent operating a
 database or a CI runner is an hour not spent building the product. Where a managed AWS service
 exists, this document chooses it over a self-hosted equivalent; the reasoning is recorded in
 ADR-003.
@@ -60,7 +60,7 @@ and read replicas for the data tier — so a spike in cached-asset requests is a
 the edge, without the application tier noticing.
 
 A three-tier model, not microservices, is the right shape for Innovate Inc. today: the application
-is one API and one worker fleet built by five people, and decomposing it now would trade benefits
+is one API and one worker fleet built by a small team, and decomposing it now would trade benefits
 this team does not need for distributed-systems problems it lacks the headcount to own. The door
 stays open: because each tier scales independently, extracting a piece of it later is a change
 within this model, not a rewrite. ADR-002 records the comparison in full.
@@ -76,12 +76,12 @@ later chapters cite them by name rather than restate them.
 
 | Principle | Meaning |
 |---|---|
-| Managed over self-hosted | Buy back the undifferentiated work; a five-person team should not run PostgreSQL failover |
+| Managed over self-hosted | Buy back the undifferentiated work; a small team should not run PostgreSQL failover |
 | Isolate by account | The strongest boundary AWS enforces, and it costs almost nothing |
 | Least privilege, mechanised | Deny-first guardrails, per-workload identities, no long-lived credentials — enforced by policy, not by review |
 | Everything as code | Terraform for infrastructure, Git for cluster state; no console changes, so `git log` always answers "what changed" |
 | Secure and cost-aware by construction | Security and cost are properties of each decision, not chapters appended at the end |
-| Start simple, leave the door open | A day-1 footprint five people can run; no choice that blocks the 100× version |
+| Start simple, leave the door open | A day-1 footprint a small team can run; no choice that blocks the 100× version |
 | Design for failure, then rehearse it | Multi-AZ by default, tested restores, explicit recovery objectives — an untested plan has an unknown recovery time |
 
 Where two principles conflict — isolation by account against operational simplicity, for instance —
@@ -100,8 +100,8 @@ stated.
 1. Primary user base and data residency are US-based at launch, driving `us-east-1`; an EU expansion
    path is reserved but not built.
 2. Innovate Inc. has no existing AWS footprint — this is a greenfield landing zone.
-3. The engineering team numbers three to eight people, with no dedicated site reliability or
-   security staff.
+3. The engineering team is small and lean, with no dedicated site reliability or security staff —
+   typical of a startup at this stage.
 4. Source control is GitHub; on GitLab or Bitbucket the CI/CD details differ, not the architecture.
 5. Application code is stateless and runs as multiple replicas — Spot capacity and rolling
    deployments both depend on it.
@@ -199,15 +199,15 @@ non-technical reader can follow without the surrounding document.
 | **Section** | §0 Scope, Assumptions and Design Principles |
 
 **Context.** Innovate Inc. must choose between AWS and GCP before any other decision can proceed.
-The company has five engineers, no existing cloud footprint, handles sensitive data, and expects to
-grow from hundreds of users to potentially millions.
+The company has a small engineering team, no existing cloud footprint, handles sensitive data, and
+expects to grow from hundreds of users to potentially millions.
 
 **Options considered.**
 
 | Option | Strengths | Weaknesses | Verdict |
 |---|---|---|---|
 | Google Cloud Platform (GCP) | GKE Autopilot removes most cluster operations; project-based isolation is simpler to stand up than AWS Organizations; Cloud SQL is straightforward to reason about | Narrower catalogue of managed services at the far end of the growth curve; shallower compliance and governance tooling for proving a security posture to enterprise customers; smaller regional hiring pool | Rejected — a strong platform, but AWS pulls further ahead the closer the curve gets to millions of users |
-| Multi-cloud from day one | Avoids provider lock-in; each workload could run on whichever provider suits it best | Doubles the operational surface — two identity models, two networking models, two toolsets to learn — for a portability benefit a five-person team will not exercise for years | Rejected — the cost is certain and immediate; the benefit is hypothetical |
+| Multi-cloud from day one | Avoids provider lock-in; each workload could run on whichever provider suits it best | Doubles the operational surface — two identity models, two networking models, two toolsets to learn — for a portability benefit a small team will not exercise for years | Rejected — the cost is certain and immediate; the benefit is hypothetical |
 | Amazon Web Services (AWS) | Widest range of managed services across the whole growth curve; deepest governance and compliance tooling; largest hiring pool of engineers who already know the platform | Steeper day-one learning curve than GCP for a team with limited cloud experience; more services to choose correctly among | **Chosen** |
 
 **Decision.** Innovate Inc.'s cloud infrastructure runs on Amazon Web Services (AWS).
@@ -242,29 +242,29 @@ provider offers.
 | **Section** | §0.2 Architecture overview — a three-tier design |
 
 **Context.** Innovate Inc. is building one REST API and one single-page application over one
-PostgreSQL database, operated by five engineers with no dedicated platform staff. The design must
-scale from hundreds of users to millions.
+PostgreSQL database, operated by a small engineering team with no dedicated platform staff. The
+design must scale from hundreds of users to millions.
 
 **Options considered.**
 
 | Option | Strengths | Weaknesses | Verdict |
 |---|---|---|---|
 | Single-host monolith | Simplest possible operating model; nothing to coordinate between services | Cannot scale the API and the database independently; a single host is a single point of failure; does not fit a managed-Kubernetes requirement | Rejected — cannot reach the stated growth target |
-| Microservices from day one | Each capability scales and deploys independently; matches the target scale's eventual shape | Requires a service mesh, distributed tracing, inter-service authentication, and a release train to coordinate — operational load a five-person team does not have the headcount to carry | Rejected — solves a scaling problem this team does not have yet, at a cost it cannot afford yet |
+| Microservices from day one | Each capability scales and deploys independently; matches the target scale's eventual shape | Requires a service mesh, distributed tracing, inter-service authentication, and a release train to coordinate — operational load a small team does not have the headcount to carry | Rejected — solves a scaling problem this team does not have yet, at a cost it cannot afford yet |
 | Three-tier (presentation, application, data) | Each tier already scales independently by its own mechanism; matches the team's actual codebase shape; a simple model a small team can hold in its head | Does not decompose the API itself into smaller services, so one large module inside the application tier would still need rethinking later | **Chosen** |
 
 **Decision.** Innovate Inc.'s application is deployed as a three-tier architecture — presentation,
 application, and data — with the network and security designs aligned to the same boundaries.
 
 **Why this is the right choice for Innovate Inc.** Innovate Inc.'s product today is one website
-talking to one API talking to one database, built by five people. Splitting that into many small
+talking to one API talking to one database, built by a small team. Splitting that into many small
 services now would mean building the safety machinery large companies use to keep many services
 talking safely, before a team big enough to own it exists. The three-tier model gives almost all the
 scaling benefit — each layer already grows on its own — without that machinery, and it does not
 block a later split; that would happen inside the application tier, not as a rebuild.
 
 **Consequences.**
-- *Gains:* A model simple enough for a five-person team to operate correctly; each tier scales
+- *Gains:* A model simple enough for a small team to operate correctly; each tier scales
   independently at no microservices-platform cost.
 - *Accepts:* The application tier stays one deployable unit, so any API change redeploys the whole
   service.
@@ -284,9 +284,10 @@ shared deployable.
 | **Pillars** | Operational Excellence · Cost Optimization · Reliability |
 | **Section** | §0 Scope, Assumptions and Design Principles |
 
-**Context.** Innovate Inc. has five engineers and no dedicated database administrator or security
-specialist. Every hour spent patching a server or debugging a CI runner is an hour not spent on the
-product. This document decides, as a standing default, which side of that trade-off it takes.
+**Context.** Innovate Inc. has a small engineering team and no dedicated database administrator or
+security specialist. Every hour spent patching a server or debugging a CI runner is an hour not
+spent on the product. This document decides, as a standing default, which side of that trade-off it
+takes.
 
 **Options considered.**
 
@@ -300,7 +301,7 @@ product. This document decides, as a standing default, which side of that trade-
 justified in the chapter where it appears.
 
 **Why this is the right choice for Innovate Inc.** Innovate Inc.'s scarcest resource is not money —
-it is the attention of five engineers also trying to ship a product. A self-hosted database looks
+it is the attention of a small team also trying to ship a product. A self-hosted database looks
 cheaper on a spreadsheet, but the real cost shows up later, as an engineer's weekend spent recovering
 from a failed upgrade instead of shipping a feature. Managed services convert that open-ended risk
 into a predictable bill, paid to a provider whose job is keeping that one thing running — costing

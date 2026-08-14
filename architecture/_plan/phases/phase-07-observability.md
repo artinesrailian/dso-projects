@@ -12,7 +12,7 @@
 ## Goal
 
 Answer the question a reviewer asks about every design that claims to be robust: **how does a
-five-person team know this system is healthy, and what do they do at 2am when it is not?**
+small team know this system is healthy, and what do they do at 2am when it is not?**
 
 Observability is where the Operational Excellence pillar lives, and it is the section that most
 clearly signals whether the author has actually run a production system. The difference is
@@ -119,7 +119,7 @@ Then, in prose:
   to solve from first principles at 3am.
 - Routing from Alertmanager and CloudWatch alarms through SNS to PagerDuty and Slack, with severity
   tiers deciding what pages and what waits for morning.
-- The honest constraint, and it belongs here: **a five-person team can sustain a very short
+- The honest constraint, and it belongs here: **a small team can sustain a very short
   page-worthy list.** An alert that pages and is not actionable will be muted within two weeks, and
   a muted alert is worse than no alert because it creates false confidence. Keep the paging list to
   the handful of conditions that mean users are being harmed right now.
@@ -170,7 +170,7 @@ per month and why chasing more would slow their team down.
 - [ ] Trace-ID correlation across tiers is explained with its concrete benefit.
 - [ ] SLO numbers and the error-budget policy match `contract.md` §10 exactly.
 - [ ] Symptom-alerts-page versus cause-alerts-dashboard is stated with its reason.
-- [ ] The five-person-team constraint on alert volume is named honestly.
+- [ ] The small-team constraint on alert volume is named honestly.
 - [ ] Operational practices cover as-code, reversible changes, rehearsed failure, and post-incident
       review.
 - [ ] `## Decision Records` present with 2 ADRs from ADR-026 – ADR-027, full template, no fields
