@@ -19,7 +19,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 02 | Network design | `done` | 00 | `drafts/02-network.md` | 007–010 |
 | 03 | Compute platform — EKS | `done` | 00 | `drafts/03-compute-eks.md` | 011–014 |
 | 04 | Containerization & CI/CD | `done` | 00 | `drafts/04-containers-cicd.md` | 015–018 |
-| 05 | Database | `todo` | 00 | `drafts/05-database.md` | 019–022 |
+| 05 | Database | `done` | 00 | `drafts/05-database.md` | 019–022 |
 | 06 | Security & data protection | `todo` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
 | 07 | Observability & operational excellence | `todo` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `todo` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
@@ -29,7 +29,7 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `05`
+**Next phase to run:** `06`
 
 ---
 
@@ -45,7 +45,7 @@ can check for gaps and duplicates. Record the numbers you **actually wrote**.
 | 02 | 007–010 | 007, 008, 009, 010 | One VPC Per Environment, No Interconnection; Three Availability Zones Rather Than Two; A Secondary CIDR in `100.64.0.0/10` for Pod Addresses; A NAT Gateway Per Availability Zone in Production, One in Non-Production |
 | 03 | 011–014 | 011, 012, 013, 014 | Amazon EKS as the Compute Platform; Platform Node Group Plus Karpenter Over Cluster Autoscaler; Graviton-First Spot for the Application Tier; No CPU Limit, Memory Request Equals Limit |
 | 04 | 015–018 | 015, 016, 017, 018 | Serving the React SPA from S3 and CloudFront, Not a Container; A Single Central Registry with Promotion by Immutable Digest; GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD; Image Signing Verified at Admission |
-| 05 | 019–022 | — | — |
+| 05 | 019–022 | 019, 020, 021, 022 | Aurora PostgreSQL Over Self-Managed and RDS; Aurora Serverless v2 With RDS Proxy Pooling; A Three-Tier Backup Strategy, Not PITR Alone; Pilot-Light Cross-Region Disaster Recovery |
 | 06 | 023–025 | — | — |
 | 07 | 026–027 | — | — |
 | 08 | 028–029 | — | — |
@@ -338,6 +338,91 @@ cannot fill its block says so here rather than leaving a silent hole.
   issue from Phase 00, the ADR-007/010 or ADR-011 Section-field issues from Phases 02/03, or the
   Phase 02 ADR word-count finding from Phase 03 — all out of scope here, still open for Phase 13.
 
+### Phase 05 — Database
+- Completed:      2026-08-14
+- Files written:  `_plan/drafts/05-database.md` (1,896 words body excluding tables and ADRs;
+  ADR-019 – ADR-022 at 250, 248, 248, and 249 words respectively, excluding both tables, all at or
+  under the 250-word cap, counted with the same whitespace-token method Phase 03 validated against
+  Phase 01's self-reported counts)
+- Word count:     1,896 (acceptance band 1,300–1,900 per this phase's acceptance criteria; drafted at
+  ~1,913 across three rounds — an initial draft, a fix pass responding to three independent
+  verification agents run via the Workflow tool, and a further fix pass responding to an advisor
+  review — trimmed to land inside the band with a small margin each round)
+- ADRs written:   ADR-019 … ADR-022
+- Pillars tagged: Reliability, Performance Efficiency, Cost Optimization, Security, Operational
+  Excellence (five of six pillars across the section's seven pillar lines plus the `## Decision
+  Records` orientation line, 2–4 per line; Sustainability not tagged — the data tier's genuine
+  sustainability story (Aurora Serverless v2 scaling to near-idle) is the same decision already
+  carried under Cost Optimization and Performance Efficiency, and tagging a sixth pillar on a section
+  it does not substantively serve on its own would violate `well-architected.md` §2.1's "two to four,
+  only where substantive" rule)
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00, 02,
+  03, and 04, then ran three independent read-only verification passes via the Workflow tool (contract
+  fidelity, style/mechanics, ADR quality against `rubric.md`), which raised 6 contract findings, 7
+  style findings, and 4 ADR-quality findings, and a fix pass that resolved all of them; then consulted
+  the advisor tool before finalizing, which caught two acceptance-criteria gaps the three verification
+  passes had not been asked to check (neither prompt covered rubric probes 3 or 6 explicitly) and one
+  regression the fix pass itself had introduced. Fixes of note, from the verification pass: removed an
+  invented "Up to 5 read replicas" quota for Amazon RDS Multi-AZ in the alternatives table —
+  `contract.md` §1 states only a qualitative comparison ("15-replica read scaling" for Aurora, no RDS
+  figure) — replaced with a qualitative claim; removed an invented "per-vCPU" billing unit for Amazon
+  RDS Proxy from ADR-020's options table and Consequences (no such line exists in `contract.md` §11);
+  fixed a self-contradictory options-table row in ADR-022 where a warm standby's Strengths cell said
+  "reduced size" while its Weaknesses cell said it "doubles" the compute bill; added the `contract.md`
+  §8-locked schema-migrations mechanism (Alembic job, Argo CD `PreSync` hook, expand/contract pattern)
+  to `## Configuration`, which the initial draft had reduced to an access-control-only mention;
+  restored bold emphasis on the Region loss row of the RPO/RTO table, then machine-diffed all six rows
+  against `contract.md` §8 to confirm a byte-identical match; scoped the Configuration table's "Writer
+  only" topology and auto-pause claims to dev specifically rather than the whole non-production
+  column, since `contract.md` §8 only fixes dev's shape and §4 describes staging as a "mirror of prod
+  topology at reduced size" (registered in `contract.md` §12, see Contract additions below); expanded
+  "High availability (HA)" and "Availability Zones (AZs)" at their true first use rather than only in
+  the `## High availability` heading; replaced internal planning/grading vocabulary that had leaked
+  into client-facing text — "presented as one rather than a strawman" and a sentence that literally
+  read "answers rubric probe 3" — with plain descriptive prose; replaced "this draft does not repeat
+  it" with "this section covers..." since the assembled deliverable has no "draft," only sections;
+  replaced unexplained "pods" jargon in ADR-020's mandatory plain-language field with "running copies
+  of the application"; and strengthened ADR-020's *Accepts* field, which had duplicated the Cost
+  impact field with a trivial "small charge" instead of a real operational downside. Fixes of note,
+  from the advisor pass: rubric probe 6 ("someone deletes the production database — walk me through
+  the next hour") had its ingredients scattered across `## Backups` with no assembled sequence — added
+  an "If it happens" table branching explicitly on cause (accidental deletion → point-in-time recovery
+  restore; account/credential compromise → restore from the vault-locked cross-account copy instead,
+  since the account's own backups may also be compromised), which is the branch a reviewer is testing
+  for and which the fix pass's own three verification prompts had not been asked to check; restored
+  two bare `§7` citations (introduced by the earlier trim pass) to `§7 Cost Optimization`, since
+  `contract.md` §14 requires "number and name"; and replaced a flat "120 connections" figure with the
+  phase document's own "several hundred connections" framing — the pooling-factor arithmetic the
+  fix-pass had stripped out to save words made the connection-exhaustion argument read as
+  unremarkable for PostgreSQL, weakening the paragraph it was added to strengthen.
+- Assumptions:    Staging's Aurora topology (writer + reader, mirroring production at reduced
+  capacity, rather than dev's writer-only shape) is inferred from `contract.md` §4's account
+  description and corroborated by §11's lean-start variant, which separately lists "no reader replica
+  in non-production" as a cost lever — implying the non-lean baseline has one — registered in
+  `contract.md` §12 rather than left ambiguous, since the Configuration table needed a definite answer
+  for both non-production rows.
+- Deferred:       The general security posture (identity, detection, pipeline gates) is Phase 06's;
+  `## Security and data protection` stays limited to controls specific to the data tier, per this
+  phase's own scope boundary. Read-replica and cache-tier scaling beyond fifteen readers is named once
+  and cross-referenced to the growth roadmap in §8, not designed here.
+- Contract additions: `_plan/contract.md` §12 — staging Aurora topology, "Writer + 1 reader, mirroring
+  production at reduced capacity."
+- Notes for the next agent: (1) ADR-020's `Section` field cites the chapter level `§4 Database`
+  because `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`,
+  `§4.4`, `§4.5`, `§4.6` are pre-registered for this chapter, and `§4.1` belongs to `## Why Aurora —
+  the alternatives considered`, which is where ADR-019 cites it) — matching the precedent Phases 02,
+  03, and 04 set for ADR-007/010, ADR-011, and ADR-015; logged below under Cross-phase issues for
+  Phase 11 to resolve once it numbers `## Configuration`. (2) Phase 06 (security) should keep citing
+  the security-group chain (node/pod SG → proxy SG → Aurora SG) and IAM database authentication
+  through RDS Proxy exactly as this draft states them, rather than re-deriving the data-tier access
+  model. (3) When this phase's own verification workflow is used as a template, add the rubric-probe
+  numbers explicitly to at least one verification prompt — a general "check the acceptance criteria"
+  instruction was not enough for three independently-run agents to individually catch a scattered
+  probe answer; the advisor pass caught it, but that is not guaranteed on every phase. (4) Did not
+  touch the open `§10.7`/`§9.7` issue from Phase 00, the ADR-007/010, ADR-011, or ADR-015 Section-field
+  issues from Phases 02–04, the Phase 02 ADR word-count finding from Phase 03, or the EKS terminology
+  conflict from Phase 04 — all out of scope here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -365,6 +450,7 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | Phase 13 should recount ADR-007 – ADR-010 against the 250-word cap (excluding the metadata and options tables) and trim if the finding holds. |
 | Phase 04 | `drafts/04-containers-cicd.md`, ADR-015 Section field | `contract.md` §14 pre-registers no subsection number for "What gets containerized" (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for the Compute Platform chapter); ADR-016 and ADR-018 correctly cite `§3.8 Container registry`, but ADR-015 (the SPA-not-a-container decision) cites the chapter level `§3 Compute Platform` instead, matching the precedent Phases 02 and 03 set for ADR-007/010 and ADR-011. | Phase 11 should assign a subsection number to that heading during assembly and update the ADR Section field to match, if it numbers it. |
 | Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Not fixed here since it is a pre-existing pattern shared by an earlier phase, not a defect unique to this one. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct both drafts' first-use expansions to match if `contract.md` §13 is the intended authority. |
+| Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | Phase 11 should assign a subsection number to `## Configuration` during assembly and update ADR-020's Section field to match, if it numbers it. |
 
 ---
 
