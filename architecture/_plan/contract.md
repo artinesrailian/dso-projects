@@ -378,7 +378,7 @@ Values invented by phase agents because they were absent above. **Append only.**
 
 | Phase | Name | Value | Why |
 |---|---|---|---|
-| — | — | — | — |
+| 02 | VPC CNI prefix-delegation block size | `/28` per ENI | §6's Add-ons row fixes "VPC CNI (prefix delegation + custom networking + network policy)" but not the delegated prefix size; `/28` is the AWS VPC CNI's actual prefix-delegation unit and is needed to explain pod density per node in `## IP address plan`. |
 
 ---
 
