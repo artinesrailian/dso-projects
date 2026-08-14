@@ -100,7 +100,7 @@ from the finished document.
   alternative and saying so plainly is more credible than pretending otherwise — but no more than two
   sentences, and the full reasoning goes in ADR-001.
 - The guiding principle, stated as the design's thesis: **managed services first**, because the
-  constraint that binds hardest here is not money, it is a five-person team's operational capacity.
+  constraint that binds hardest here is not money, it is a small team's operational capacity.
   Every hour spent operating a database or a CI runner is an hour not spent on the product.
 
 ### `## 2. Architecture Overview — a three-tier design` (~250 words + table)
@@ -124,8 +124,8 @@ properly here rather than mentioning it in passing.
      separation, and why a traffic spike can be absorbed at the edge without the application tier
      noticing.
 - Close with why a three-tier model is the right choice *here* rather than a set of microservices:
-  the application is one API and one worker, the team is five people, and premature decomposition
-  buys distributed-systems problems in exchange for organisational benefits a five-person team does
+  the application is one API and one worker, the team is small, and premature decomposition
+  buys distributed-systems problems in exchange for organisational benefits a small team does
   not need yet. Note the door left open — the tiers scale independently, so extracting a service
   later is a change within the model, not a rewrite of it.
 
@@ -136,12 +136,12 @@ reference them:
 
 | Principle | Meaning |
 |---|---|
-| Managed over self-hosted | Buy back the undifferentiated work; a five-person team should not run PostgreSQL failover |
+| Managed over self-hosted | Buy back the undifferentiated work; a small team should not run PostgreSQL failover |
 | Isolate by account | The strongest boundary AWS enforces, and it costs almost nothing |
 | Least privilege, mechanised | Deny-first guardrails, per-workload identities, no long-lived credentials — enforced by policy, not by review |
 | Everything as code | Terraform for infrastructure, Git for cluster state; no console changes, so `git log` always answers "what changed" |
 | Secure and cost-aware by construction | Security and cost are properties of each decision, not chapters appended at the end |
-| Start simple, leave the door open | A day-1 footprint five people can run; no choice that blocks the 100× version |
+| Start simple, leave the door open | A day-1 footprint a small team can run; no choice that blocks the 100× version |
 | Design for failure, then rehearse it | Multi-AZ by default, tested restores, explicit recovery objectives — an untested plan has an unknown recovery time |
 
 Add one sentence after the table: where two principles conflict, the trade-off is stated explicitly
@@ -155,8 +155,8 @@ judged against unstated requirements. Include at least:
 1. Primary user base and data residency are US-based at launch, driving `us-east-1`; an EU expansion
    path is reserved in the address plan but not built.
 2. No existing AWS footprint — this is a greenfield landing zone.
-3. An engineering team of roughly three to eight people at launch, with no dedicated site reliability
-   or security staff.
+3. A small, lean engineering team at launch — typical of a startup at this stage — with no dedicated
+   site reliability or security staff.
 4. Source control is GitHub; on GitLab or Bitbucket the CI mechanics change but the architecture does
    not.
 5. Application code is stateless and can run as multiple replicas — a prerequisite this design assumes
@@ -220,13 +220,13 @@ End the draft with `## Decision Records` containing exactly three ADRs, using th
   to choose AWS is breadth of managed services at every stage of the growth curve, the depth of the
   security and governance tooling that a company handling sensitive data will need for SOC 2, and the
   size of the hiring pool for a startup that will need to recruit. Reject multi-cloud outright: for a
-  five-person team it multiplies operational surface for a portability benefit they will never
+  small team it multiplies operational surface for a portability benefit they will never
   exercise.
 - **ADR-002 — Three-tier architecture rather than microservices or a monolith on a single host.**
   Options: single-host monolith, three-tier, microservices from day one. The reasoning is team size
   against the benefit of independent scaling per tier.
 - **ADR-003 — Managed services first.** Options: managed services, self-hosted on EC2, self-hosted in
-  Kubernetes. The reasoning is that a five-person team's scarcest resource is attention, and that
+  Kubernetes. The reasoning is that a small team's scarcest resource is attention, and that
   every self-hosted component converts a fixed monthly fee into an unbounded operational liability.
 
 Remember the mandatory **"Why this is the right choice for Innovate Inc."** field in each: three to
