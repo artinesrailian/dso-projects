@@ -23,13 +23,13 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 06 | Security & data protection | `done` | 00, 01–05 | `drafts/06-security.md` | 023–025 |
 | 07 | Observability & operational excellence | `done` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `done` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
-| 09 | Well-Architected alignment & growth roadmap | `todo` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
+| 09 | Well-Architected alignment & growth roadmap | `done` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
 | 10 | Diagrams | `todo` | 01–09 | `../diagrams/01…05` | — |
 | 11 | Body assembly | `todo` | 00–10 | `../README.md` §0–§9 | — |
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `09`
+**Next phase to run:** `10`
 
 ---
 
@@ -726,6 +726,95 @@ cannot fill its block says so here rather than leaving a silent hole.
   pre-existing EKS terminology conflict itself (only added this draft to the tally) — all out of scope
   here, still open for Phase 13.
 
+### Phase 09 — Well-Architected alignment & growth roadmap
+- Completed:      2026-08-15
+- Files written:  `_plan/drafts/09-wellarchitected-growth.md` (1,034 words body excluding tables; no
+  ADR block — none reserved for this phase, per `decision-register.md` §2 and this phase's own
+  "Files you own" list)
+- Word count:     1,034 (acceptance band 720–1,080). Drafted at 1,059, trimmed to 988 across the
+  intro paragraphs and several "Not yet addressed" gap paragraphs, then grew back to 1,034 after an
+  advisor pass caught two acceptance-criteria gaps the three verification agents could not check
+  (none had been given the phase document itself, so nothing independently walked its 15-item
+  acceptance list): "what breaks first" item 6 (the team) named the constraint but not an
+  observable signal or an answer, and the Performance Efficiency gap's trigger was a bare pointer
+  ("named in the growth roadmap below") rather than a stated trigger. Both fixed with content
+  already sourced elsewhere in the drafts (ADR-011/012's platform-engineer trigger; the stage-2
+  latency/capacity signal), so neither introduces new architecture.
+- ADRs written:   none — this phase attributes decisions already recorded in ADR-001–029, it does
+  not make new ones
+- Pillars tagged: All six, explicitly, on the `## Well-Architected Framework alignment` section
+  (per this phase document's own literal instruction, `> **Well-Architected pillars.** All six.` —
+  see Key decisions below for the tension this creates against the general 2–4 pillar cap);
+  Reliability · Performance Efficiency · Cost Optimization · Operational Excellence on the
+  `## Growth roadmap — from hundreds to millions` section (4 pillars, within the general cap)
+- Key decisions:  Drafted directly (not fanned out) to preserve voice continuity with drafts 00–08,
+  then ran three independent read-only verification passes via the Workflow tool (contract
+  fidelity, style/mechanics, and — the check this phase's own document flags as the most likely
+  failure mode — an evidence-truth check verifying every row of the six pillar tables against the
+  actual text of drafts 00–08), and a fix pass that resolved the confirmed findings. Fixes of note:
+  removed a "per unit of energy" claim from the Sustainability table's Graviton row that repurposed
+  a cost/price-performance figure (`contract.md` §11's ~20%) as an unstated energy-efficiency
+  metric — replaced with `well-architected.md` §1's own qualitative "performance per watt" framing;
+  removed a "roughly half" ratio comparing the lean-start variant's cost to the fuller design's,
+  which `contract.md` §11 forbids as a new figure derived from its two cost anchors — replaced with
+  both anchor figures stated side by side, undifferenced; removed "for Redis" from the Stage 2
+  ElastiCache growth-roadmap entry, since `contract.md` fixes only the service name, not the engine,
+  and no phase has registered a specific engine in §12; reworded a Sustainability evidence row that
+  cited §0's "managed over self-hosted" principle for a shared-multi-tenant-capacity argument §0
+  itself does not make, to state only what §0 actually argues (avoiding infrastructure the team
+  would otherwise own and run); fixed the banned word "just" in the Operational Excellence table;
+  expanded nine acronyms on first use that the initial draft had used bare (ADR, IAM, EKS, OIDC,
+  KMS, RDS, VPC, CIDR, NAT, WAF, DDoS); trimmed both `##` section openers from three sentences to
+  two per `style-guide.md` §2; and added two additional section citations to Reliability-table rows
+  whose claims spanned more sources than the single section originally cited. One finding from the
+  contract-fidelity pass was a false positive from that agent's own incomplete file scope (it was
+  not given `drafts/08-cost.md`, so it could not verify the "roughly 15% of trend" trigger figure,
+  which is in fact ADR-028's own verbatim `Revisit when` wording) — verified directly against this
+  session's own earlier reading of `08-cost.md` and left unchanged. Two findings were verified as
+  false positives against my own direct reading of the source drafts and left unchanged: an "eleven
+  named layers" claim the evidence-truth pass thought undercounted `06-security.md`'s twelve-layer
+  table, but which in fact correctly cites `02-network.md`'s own, separate eleven-layer "Securing
+  the network" table (§2.4), not §5.1's table.
+- Assumptions:    Evidence-table section citations follow the same fallback pattern Phases 02–06
+  established: `contract.md` §14's confirmed subsections (§0.2, §1.1, §2.2–§2.4, §3.1/§3.3–§3.5/§3.8–
+  §3.9, §4.1–§4.2/§4.4–§4.6, §5.3–§5.4, §6.2–§6.3, §7.1–§7.2/§7.4, §8.2, §9.7) plus the ones Phase
+  06 additionally confirmed in `STATE.md` (§2.3, §3.1, §4.2) were cited by subsection; everything
+  else (identity/guardrail sections in §1, most of §2's and §3's remaining sections, §4.3, §5.1–§5.2/
+  §5.5–§5.7, §6.1/§6.4–§6.5, §7.3/§7.5) was cited at chapter level rather than guessed at a specific
+  unconfirmed subsection number, consistent with the precedent those phases set. §7.3 was inferred
+  positionally (bracketed by confirmed §7.2 and §7.4) only once, in an early draft, and was removed
+  in the fix pass in favor of chapter-level `§7 Cost Optimization` after the contract-fidelity pass
+  flagged a genuine ambiguity there (see Cross-phase issues below).
+- Deferred:       No new architecture — every pillar-table claim traces to drafts 00–08; nothing
+  here was invented to fill a gap. Stage-by-stage growth detail beyond the four-stage table and the
+  six-item "what breaks first" ordering is not this phase's to expand further.
+- Contract additions: none — the one candidate addition (an ElastiCache engine choice) was avoided
+  by not naming a specific engine, rather than registered, since nothing in this draft strictly
+  needs that specificity.
+- Notes for the next agent: (1) See Cross-phase issues below for two new entries this phase raises:
+  a genuine ambiguity in `contract.md` §11's own text about which chapter carries the growth-stage
+  cost trajectory table (§11 says "§8.3", but §14's chapter map and `08-cost.md`'s own structure put
+  equivalent content at what this phase infers as §7.3), and a direct conflict between this phase's
+  own document (which explicitly instructs `> **Well-Architected pillars.** All six.`) and the
+  general two-to-four-pillar cap in `style-guide.md` §3 / `AGENT-PROTOCOL.md` §5.4 and §6's anti-
+  pattern list — resolved here by following this phase's own explicit, literal instruction (the
+  chapter's entire content is genuinely, structurally about all six pillars, not a lazy blanket tag),
+  but flagged since `AGENT-PROTOCOL.md` states it wins over phase documents in a conflict. (2) The
+  "Accepted trade-offs between pillars" table reproduces `well-architected.md` §3's nine rows with
+  three minor, deliberate deviations from byte-verbatim: American spelling ("centralized" vs. the
+  source's "centralised"), backticked Kubernetes object names (`PodDisruptionBudget`, `NetworkPolicy`
+  — required by `style-guide.md` §3's own inline-code rule, which the source file does not follow),
+  and "named above" in place of the source's "named in §9" (avoiding restating the same §10.7/§9.7-
+  style stale self-reference Phase 00 already flagged as unresolved). Two rows keep the source's
+  conditional-tense wording ("would undo," "would have captured") unchanged despite
+  `style-guide.md` §1's present-tense rule, because they are inside a table `decision-register.md`
+  and this phase's acceptance criteria require to reproduce verbatim from `well-architected.md` §3 —
+  editing that file is out of this phase's ownership, so the tense issue is native to the source, not
+  fixed here. (3) Did not touch the open `§10.7`/`§9.7` issue from Phase 00, the ADR-007/010,
+  ADR-011, ADR-015, or ADR-020 Section-field issues from Phases 02–05, the Phase 02 ADR word-count
+  finding from Phase 03, or the EKS terminology conflict tracked since Phase 04 — all out of scope
+  here, still open for Phase 13.
+
 ---
 
 ## Open questions
@@ -756,7 +845,9 @@ cannot fill its block says so here rather than leaving a silent hole.
 | Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | Phase 11 should assign a subsection number to `## Configuration` during assembly and update ADR-020's Section field to match, if it numbers it. |
 | Phase 06 | `contract.md` §14 vs. `phases/phase-11-assembly.md` | Phases 02–05 each logged a "no pre-registered subsection number" issue for one or two ADRs' Section fields, reasoning from `contract.md` §14's short "most-cited" reference table alone. While resolving this phase's own ADR Section fields (`contract.md` §14 names `phase-11-assembly.md` as the authority for subsection numbering), it turned out that file already contains the **complete** subsection outline for every chapter, §0 through §9. Concretely: `§2.3 Routing, egress and private connectivity` appears to cover both ADR-007's topic (connectivity between environments) and ADR-010's topic (NAT Gateways/egress), which draft 02 splits across two `##` headings; `§3.1 Why Amazon EKS` matches ADR-011's topic directly; `§4.2 Configuration and connection management` matches ADR-020's topic directly. ADR-015 (SPA not containerized) is less clear-cut — draft 04's opening heading is "What gets containerized — and what does not," and no `phase-11-assembly.md` heading matches that wording exactly; the nearest candidates are `§3.1` or `§3.7 Containerization — image building`, but this needs a content read, not just a title match. Not fixed here — none of these are this phase's files. | Phase 13 should re-open the ADR-007/010, ADR-011, ADR-015, and ADR-020 Section-field entries above against `phase-11-assembly.md`'s outline directly (not `contract.md` §14's shorter table) and correct each ADR's Section field to its real subsection number, resolving ADR-015's ambiguous case by reading draft 04's content against the outline. |
 | Phase 08 | `drafts/08-cost.md` §1, first-use expansion of Amazon EKS | Same split Phase 04 logged between `style-guide.md` §5's general worked example ("Amazon Elastic Kubernetes Service (EKS)") and `contract.md` §13's literal lock ("Amazon EKS (first use), then 'EKS'"). This draft's first EKS expansion follows style-guide.md's fuller form, matching drafts 03 and 04; draft 06 is still the lone holdout on contract.md §13's literal form. Not fixed here — this is the same pre-existing pattern, not a new defect. | Now four drafts to reconcile (03, 04, 08 on one side; 06 on the other) once Phase 13 decides which normative file wins. |
-| Phase 08 | `well-architected.md` §3 trade-off table | This phase's ADR-028 (deferring Compute Savings Plans and reserved Aurora capacity until the baseline stabilizes) is a pillar trade-off `well-architected.md` §3's table does not yet list: it leans toward **Operational Excellence and reduced commitment risk** at the expense of a larger **Cost Optimization** discount captured sooner. Not added to `well-architected.md` directly — that file is not in this phase's "Files you own" list, and §3 itself says content phases should flag new trade-offs for Phase 09 to pick up, not edit the file. | Phase 09 (Well-Architected alignment) should add a row: "Deferring Compute Savings Plans to a stable baseline \| Operational Excellence, reduced commitment risk \| A larger, sooner Cost Optimization discount \| A wasted 12-month commitment against a moving architecture costs more than the ~30% discount it would have captured." |
+| Phase 08 | `well-architected.md` §3 trade-off table | This phase's ADR-028 (deferring Compute Savings Plans and reserved Aurora capacity until the baseline stabilizes) is a pillar trade-off `well-architected.md` §3's table does not yet list: it leans toward **Operational Excellence and reduced commitment risk** at the expense of a larger **Cost Optimization** discount captured sooner. Not added to `well-architected.md` directly — that file is not in this phase's "Files you own" list, and §3 itself says content phases should flag new trade-offs for Phase 09 to pick up, not edit the file. | **Resolved in Phase 09.** Added as the tenth row of `drafts/09-wellarchitected-growth.md`'s trade-off table, exact text as specified here. |
+| Phase 09 | `contract.md` §11 vs. §14's chapter map and `drafts/08-cost.md`'s own structure | `contract.md` §11 says the growth-stage cost trajectory table is "for the growth-stage projections in §8.3." But `contract.md` §14 fixes §8 as the Growth Roadmap chapter (this phase's own output, part two) and §7 as Cost Optimization (draft 08) — and `drafts/08-cost.md` already contains its own three-stage-plus-one growth-cost table as its third `##` section (positionally §7.3, bracketed by the confirmed §7.2 and §7.4). So §11's "§8.3" self-reference does not match either the chapter map or where the actual content already lives. Not fixed here — `drafts/09-wellarchitected-growth.md` only cross-references it at chapter level (`§7 Cost Optimization`), avoiding asserting either specific subsection number. | Phase 11 should determine, when numbering §7 and §8 during assembly, whether `contract.md` §11's "§8.3" is a stale/mistaken reference (most likely, since §8 is this phase's Growth Roadmap chapter, not Cost Optimization) and correct it, or confirm the growth-cost table is meant to be duplicated or moved into §8. |
+| Phase 09 | `phases/phase-09-well-architected-growth.md` vs. `style-guide.md` §3 / `AGENT-PROTOCOL.md` §5.4 and §6 | This phase's own document explicitly instructs the `## Well-Architected Framework alignment` section's pillar line to read `> **Well-Architected pillars.** All six.` — but `style-guide.md` §3 and `AGENT-PROTOCOL.md` §5.4 both say "Two to four pillars," and `AGENT-PROTOCOL.md` §6 names "Tagging all six pillars on every section" as an explicit anti-pattern equivalent to tagging none. `AGENT-PROTOCOL.md`'s own header states it wins over phase documents in a direct conflict. `drafts/09-wellarchitected-growth.md` follows the phase document's literal instruction (the chapter's entire content is structurally about all six pillars in six dedicated subsections, not a blanket tag standing in for real analysis), not the general cap. | Phase 13 should decide whether this is a sanctioned, deliberate exception (the one chapter in the document whose entire purpose is comprehensive six-pillar coverage) or should be corrected to a 2–4-pillar line per the general rule. |
 
 ---
 
