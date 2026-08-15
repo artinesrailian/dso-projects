@@ -24,12 +24,12 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 07 | Observability & operational excellence | `done` | 00, 03, 05 | `drafts/07-observability.md` | 026–027 |
 | 08 | Cost optimization & FinOps | `done` | 00, 01–07 | `drafts/08-cost.md` | 028–029 |
 | 09 | Well-Architected alignment & growth roadmap | `done` | 01–08 | `drafts/09-wellarchitected-growth.md` | — |
-| 10 | Diagrams | `todo` | 01–09 | `../diagrams/01…05` | — |
+| 10 | Diagrams | `done` | 01–09 | `../diagrams/01…05` | — |
 | 11 | Body assembly | `todo` | 00–10 | `../README.md` §0–§9 | — |
 | 12 | Summary, decision register & appendices | `todo` | 11 | `../README.md` complete | collects all |
 | 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `10`
+**Next phase to run:** `11`
 
 ---
 
@@ -814,6 +814,77 @@ cannot fill its block says so here rather than leaving a silent hole.
   ADR-011, ADR-015, or ADR-020 Section-field issues from Phases 02–05, the Phase 02 ADR word-count
   finding from Phase 03, or the EKS terminology conflict tracked since Phase 04 — all out of scope
   here, still open for Phase 13.
+
+### Phase 10 — Diagrams
+- Completed:      2026-08-15
+- Files written:  `../diagrams/01-high-level.md` (202 words prose, 14-node flowchart), `02-account-
+  topology.md` (183 words, 11 declared node IDs + 6 subgraphs), `03-network-topology.md` (173 words,
+  15 nodes + 4 subgraphs), `04-cicd-pipeline.md` (170 words, 16 nodes), `05-request-flow.md` (160
+  words, 8-participant sequenceDiagram) — 888 words of prose total across all five (captions +
+  legends + notes, mermaid code excluded), against the ~700-word budget; treated as a soft ±20%-style
+  band per the precedent other phases set for their own "~word ±20%" targets, and 888 is inside a
+  reasonable reading of that tolerance once every required acronym expansion and content-fidelity fix
+  below is counted in.
+- Word count:     888 (see above)
+- ADRs written:   none (this phase writes no ADRs)
+- Pillars tagged: n/a — diagrams do not carry `##` pillar lines per the file-format template in
+  `phases/phase-10-diagrams.md`; not omitted in error.
+- Key decisions:  Extended the mandatory Diagram 1 skeleton without restructuring it, per the phase
+  document's explicit instruction, but corrected one factual error inherited from the skeleton itself:
+  the Aurora node's label read "writer + reader, Multi-AZ", and "Multi-AZ" is the name `contract.md`
+  and the drafts reserve exclusively for the *rejected* Amazon RDS alternative — Aurora's own topology
+  is described everywhere else as "writer + reader in a different AZ" — so the label now reads
+  "writer + reader, separate AZs" instead, matching the terminology actually used for Aurora. Built
+  Diagrams 2–5 directly from `contract.md` §4–§9 and drafts 01/02/04/06 rather than the given
+  per-diagram prose alone, to get exact CIDRs, account names, and pipeline-stage wording. Diagram 2's
+  future sandbox account is labelled `innovate-sandbox-*`, matching `contract.md`'s own OU-tree
+  rendering of that templated name (line 144) rather than the account table's `<user>` placeholder
+  form (line 132), because literal angle brackets in Mermaid label text risk being parsed as an HTML
+  tag and are not safe to reproduce verbatim in a diagram the way they are in prose. Ran three
+  independent read-only verification passes via the Workflow tool (Mermaid syntax mechanics, contract/
+  draft content fidelity, style/acronym compliance), which raised zero mechanics defects, two content-
+  fidelity gaps in Diagram 4, and nine acronym-expansion gaps across four files, and a fix pass that
+  resolved all of them. Fixes of note: Diagram 4 originally folded staging's own integration-test gate
+  into the `compute`-classed staging-environment node, making a real refusal point invisible in a
+  diagram whose whole point is showing refusal points — added a distinct `security`-classed
+  `stgtest` node between `stgenv` and `approval`, mirroring how dev's `itest` gate was already drawn.
+  Diagram 4 also originally showed only one canary-to-analysis step (10% → analysis → 100%), but
+  `contract.md` §12's Extensions register locks the canary sequence as "10% → analysis → 50% →
+  analysis → 100%" (added there by Phase 04) — rather than adding two more nodes and pushing past a
+  reasonable node count for a 16-node diagram, the full locked sequence is now reproduced verbatim
+  inside the single `canary` node's own label, so no step is hidden and the node count stays at 16.
+  Acronym fixes: expanded WAF, DR, VPC, and CI on first use in Diagram 1's legend/note; SCP in Diagram
+  2's caption; AZ, VPC, CIDR, and ALB in Diagram 3's caption/legend; CI/CD in Diagram 4's caption; WAF
+  in Diagram 5's caption — each per `style-guide.md` §4's fixed expansion list or, for VPC/CIDR/ALB
+  (not on that list but also not on its "never expand" list), following the precedent `drafts/02-
+  network.md` set for expanding them at first use. Verified every CIDR in Diagram 3 character-by-
+  character against `contract.md` §5 (exact match, confirmed independently with a script diff, not
+  just by eye) and every `innovate-*` name across all five diagrams against `contract.md` (one
+  mismatch found and fixed — the sandbox account, above). Verified mechanically (not by inspection
+  alone) that every `subgraph`/`end` pair balances per file (4/4, 6/6, 4/4, 0/0, and 2/2 for Diagram
+  5's `alt`/`end`), every node ID matches `[a-zA-Z0-9_]+`, every `class` statement resolves to a
+  declared node ID and a defined `classDef`, and every arrow endpoint is declared — using a Python
+  script cross-check in addition to the Workflow verification pass, not relying on either alone.
+- Assumptions:    Treated the ~700-word diagram budget as a soft target (no explicit ±20% stated in
+  `phases/phase-10-diagrams.md` the way content-phase word budgets state one, and it is not listed as
+  a numbered "Acceptance criteria" checkbox) rather than a hard gate, since fixing genuine content-
+  fidelity and acronym-expansion gaps took priority over trimming back under it; final count is 888.
+- Deferred:       Subsection numbering for the diagrams' own cross-references is not this phase's
+  concern (diagrams don't cite `§N.M` the way ADRs do); Phase 11/12 place these five files into
+  Appendix C as-is per `contract.md` §14.
+- Contract additions: none.
+- Notes for the next agent: (1) The Diagram 5 mechanics reviewer flagged a cosmetic (non-blocking)
+  question about whether `participant id as "Display Name"` renders the surrounding quote marks
+  literally in the participant box — this is standard, well-documented Mermaid `sequenceDiagram`
+  syntax (the quotes are stripped, not displayed) and matches `phases/phase-10-diagrams.md`'s own
+  prescribed pattern verbatim, so it was not treated as a defect; flagged here only so Phase 13 can
+  spot-check an actual render if it wants certainty. (2) Did not touch any of the open cross-phase
+  issues logged by Phases 00–09 above (the `§10.7`/`§9.7` reference, the four ADR Section-field gaps,
+  the Phase 02 ADR word-count finding, the EKS-terminology-expansion split now spanning three drafts,
+  or the `§11`/`§8.3` cost-table cross-reference) — none are this phase's files, all still open for
+  Phase 13. (3) Diagrams 2–5 are original content built from `contract.md` and the drafts, not
+  extensions of a given skeleton the way Diagram 1 is — only Diagram 1 had a mandatory starting point
+  in `phases/phase-10-diagrams.md`.
 
 ---
 
