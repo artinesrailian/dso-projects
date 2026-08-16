@@ -77,6 +77,14 @@ These assumptions protect the design from being judged against requirements the 
 6. No hybrid or on-premises connectivity requirement.
 7. Schema changes follow an expand/contract pattern.
 
+### 0.5 Out of scope
+
+Deliberately excluded: application source code and schema design; end-user authentication
+implementation (recommended in §5.5, not designed); marketing analytics, notifications, and mobile
+clients; a data warehouse; active-active multi-region deployment; formal compliance certification, as
+distinct from the readiness built toward it; and capacity testing and the Terraform implementation,
+which follow from this design rather than define it.
+
 ---
 
 ## 1. Cloud Environment Structure
@@ -97,7 +105,9 @@ account separation, without anyone writing a correct IAM policy. Consolidated bi
 level, so guardrails differ by risk; quotas are counted per account, so a runaway load test in
 `innovate-dev` cannot exhaust production's headroom. The same separation buys **separation of
 duties**: a full compromise of `innovate-prod` still cannot reach the log sink or disable the
-findings pipeline — what a SOC 2 audit asks for.
+findings pipeline — what a SOC 2 audit asks for. Each account pays its own ~$25–60/month baseline
+(GuardDuty, Config, VPC endpoints) — why the answer is seven accounts, not twenty (Appendix B,
+ADR-004).
 
 ### 1.2 Account inventory
 
@@ -228,6 +238,8 @@ fails silently.
 Innovate Inc.'s network enforces the three-tier model in §0.2 inside a VPC per environment: network
 placement keeps the presentation tier public, the application tier reachable only from the ALB, and
 the data tier reachable only from the application tier.
+
+> **Well-Architected pillars.** Security · Reliability · Performance Efficiency · Cost Optimization
 
 ### 2.1 Principles and IP address plan
 
@@ -397,6 +409,8 @@ internet-facing entry point, CloudFront, and every hop after it stays encrypted:
 
 Innovate Inc.'s **application tier** — the Flask REST API and its background workers — runs on Amazon
 EKS inside the Private — App subnets of §2.2, reachable only from the ALB.
+
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence · Cost Optimization
 
 ### 3.1 Why Amazon EKS
 
@@ -613,6 +627,8 @@ Innovate Inc.'s data tier — the third tier of the three-tier model in §0.2 �
 PostgreSQL-Compatible Edition**, using **Aurora Serverless v2** capacity units, fronted by **Amazon RDS
 Proxy**, inside the Private — Data subnets established in §2.2.
 
+> **Well-Architected pillars.** Reliability · Security · Performance Efficiency · Cost Optimization
+
 ### 4.1 Recommendation and alternatives considered
 
 Self-managed PostgreSQL on EC2 is cheapest on paper, wrong for a team with no database administrator —
@@ -717,6 +733,8 @@ RTO; next is a warm standby, then active-active (§8).
 Security is a property already built into §1–§4 — SCPs, private subnets, Pod Security Admission, image
 signing, encryption at rest — since any single control eventually fails.
 
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence
+
 ### 5.1 Security model
 
 Defense in depth spans every layer: organization guardrails and identity (§1), network (§2), workload
@@ -806,6 +824,8 @@ Innovate Inc.'s operating question is not whether a server is up; it is whether 
 they asked for, and if not, which tier is failing them — fewer signals, each answering one specific
 question, beat a wall of graphs nobody reads at 2am.
 
+> **Well-Architected pillars.** Operational Excellence · Reliability · Performance Efficiency · Cost Optimization
+
 ### 6.1 Observability strategy
 
 Each tier fails differently and is watched differently: presentation through edge metrics and
@@ -826,7 +846,9 @@ What is measured at the application tier is the RED method — Rate, Errors, Dur
 plus saturation: latency percentiles, the 5xx rate, gunicorn saturation, RDS Proxy pool utilization,
 queue depth, pod restarts. A trace ID from CloudFront propagates through the ALB into every structured
 log line, so one identifier retrieves the whole story instead of grep-and-hope. Logs carry no PII
-(§5.3).
+(§5.3). A cheaper in-cluster `kube-prometheus-stack` is adequate at launch; managed Prometheus/Grafana
+is worth the cost once a monitor going blind during the cluster incident it watches becomes the risk
+that matters (Appendix B, ADR-026).
 
 ### 6.3 Service level objectives
 
@@ -859,6 +881,8 @@ restore, scaling a spike, revoking a credential, DR failover (§4.6).
 
 "Cost-effective" is one of four adjectives Innovate Inc. used to describe what it wants; this chapter
 treats cost like security — a property of the design, priced honestly.
+
+> **Well-Architected pillars.** Cost Optimization · Operational Excellence · Reliability · Sustainability
 
 ### 7.1 What this architecture costs
 
@@ -961,6 +985,8 @@ The decisions expensive to change later were made for stage 4 on day one: the ac
 (§4.1). Everything else is meant to change, and this chapter says when — priced, at each stage, in
 §7.3.
 
+> **Well-Architected pillars.** Reliability · Performance Efficiency · Cost Optimization · Operational Excellence
+
 ### 8.1 Stages and triggers
 
 | Stage | Scale | What changes | Trigger |
@@ -984,5 +1010,110 @@ the honest reason this design defers a mesh, active-active, and Shield Advanced.
 
 None of the stage-2 through stage-4 changes require rebuilding the foundation, because the foundation
 was chosen for stage 4 on day one.
+
+---
+
+## 9. Well-Architected Framework Alignment
+
+The Well-Architected Framework is used here as a design tool applied to decisions already made in
+§0–§8 — naming a pillar forces an honest statement of what a decision leaned toward and gave up.
+
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence · Cost Optimization
+
+### 9.1 Operational Excellence
+
+Can the team run and improve this system without heroics?
+
+| What this design does | Where |
+|---|---|
+| Infrastructure and cluster state as code; Argo CD reverts drift automatically | §1; §3.9 |
+| Small, reversible deployments — a canary, one-commit rollback | §3.9 |
+| A shared SLO and automatic error-budget freeze end mid-incident severity debates | §6.3 |
+
+Gap: no dedicated on-call rotation yet — trigger: a staffed rotation (§6.2).
+
+### 9.2 Security
+
+Are data, systems, and people protected at every layer, not only the perimeter?
+
+| What this design does | Where |
+|---|---|
+| No long-lived credential anywhere, human or machine | §1.4; §5.2 |
+| A tamper-evident audit trail in a separate account no workload can write to | §5.4 |
+| Defense in depth, edge to database — eleven named layers | §2.4 |
+
+Gap: no service mesh mTLS, detection capped at a weekly review — triggers: service count past a
+handful, a finding volume the review can no longer absorb.
+
+### 9.3 Reliability
+
+Does the system recover from failure automatically and meet demand without guessing capacity?
+
+| What this design does | Where |
+|---|---|
+| Automatic recovery — probes, `PodDisruptionBudget`s, Karpenter, Aurora failover | §3.3; §3.5; §4.5 |
+| Recovery is tested, not only documented — monthly restores, quarterly DR drills | §4.4; §4.6 |
+| Fault isolation at every layer — one account/VPC per environment, no interconnection | §1.1; §2 |
+
+Gap: single-region, 60-minute RTO — trigger: the business finding that unacceptable.
+
+### 9.4 Performance Efficiency
+
+Are computing resources used efficiently as demand and technology change?
+
+| What this design does | Where |
+|---|---|
+| Managed, purpose-built services over self-built equivalents by default | §0.3 |
+| Right-sized compute chosen automatically — Karpenter in seconds | §3.3 |
+| No CPU limit removes throttling; idle capacity is never punished | §3.5 |
+
+Gap: no caching tier, no load test at target scale — trigger: p95 latency drifting up with database
+capacity sustained high (§8.1, stage 2).
+
+### 9.5 Cost Optimization
+
+Does the business get the value it pays for, measured and attributed, not merely spent?
+
+| What this design does | Where |
+|---|---|
+| Cloud financial management as a named, ongoing practice | §7.5 |
+| Consumption-based pricing — Aurora floor, Spot, scheduled dev shutdown | §7.4 |
+| A costed, documented cheaper alternative — the lean-start variant | §7.2 |
+
+Gap: no commitment discount until the baseline stabilizes — trigger: spend within ~15% of trend for
+two consecutive quarters.
+
+### 9.6 Sustainability
+
+Is this workload's environmental impact minimized, not someone else's problem?
+
+| What this design does | Where |
+|---|---|
+| Graviton-first compute — the same ~20% performance-per-watt advantage Cost Optimization captures | §3.3 |
+| Karpenter consolidation and bin-packing — fewer, busier nodes instead of many idle ones | §3.3 |
+| Scale-to-zero where load allows — KEDA, Aurora auto-pause, dev shuts down off-hours | §3.4; §7.4 |
+
+These are the same decisions serving Cost Optimization above — more credible than a separate program.
+Gap: no carbon-footprint measurement; `us-east-1` was chosen for the user base, not carbon intensity.
+
+### 9.7 Accepted trade-offs between pillars
+
+Ten trade-offs run through this design, each stated here rather than left for a reviewer to infer,
+each with a trigger elsewhere in this document so it does not quietly become permanent. §8's growth
+roadmap is the other half of that mechanism: every trigger named there is a point on the curve from a
+few hundred users to millions, not an open-ended someday.
+
+| Trade-off | Leaned toward | At the expense of | Why, for Innovate Inc. |
+|---|---|---|---|
+| Seven accounts instead of one | Security, Reliability | Cost Optimization, Operational Excellence | A hard isolation boundary for sensitive data is worth ~$25–60/month per account and centralized access management |
+| Three NAT Gateways in production | Reliability | Cost Optimization | An AZ-local NAT failure must not take out a third of the platform; non-production runs one and accepts the risk |
+| Three separate EKS control planes | Reliability, Security | Cost Optimization | A shared cluster would undo the account isolation; the lean-start variant is offered as the explicit alternative |
+| Aurora over RDS Multi-AZ | Reliability, Performance Efficiency | Cost Optimization | Faster failover, read scaling, and a cross-region DR path that RDS cannot offer without redesign |
+| Spot instances for the application tier | Cost Optimization, Sustainability | Reliability | Recovered by On-Demand fallback, `PodDisruptionBudget`s, and a stateless-workloads-only rule |
+| Graviton first | Cost Optimization, Sustainability, Performance Efficiency | Operational Excellence | Requires multi-architecture image builds — a one-time pipeline cost |
+| Managed Prometheus/Grafana deferred to stage 2 | Cost Optimization | Operational Excellence | In-cluster monitoring is blind during a cluster incident; accepted knowingly while traffic is low |
+| Pilot-light DR instead of active-active | Cost Optimization, Operational Excellence | Reliability | A 60-minute RTO is acceptable at this stage; the trigger to change it is named above |
+| Deferring a service mesh | Operational Excellence, Cost Optimization | Security | `NetworkPolicy` and TLS cover the current service count; mesh mTLS arrives when the count justifies the operational load |
+| Deferring Compute Savings Plans to a stable baseline | Operational Excellence, reduced commitment risk | A larger, sooner Cost Optimization discount | A wasted 12-month commitment against a moving architecture costs more than the ~30% discount it would have captured |
 
 <!-- SECTIONS 10+ AND APPENDICES: Phase 12 -->
