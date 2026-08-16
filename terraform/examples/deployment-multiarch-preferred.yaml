@@ -1,0 +1,77 @@
+# For teams that want Graviton by default but need an x86 fallback if
+# Graviton capacity is temporarily unavailable — a SOFT preference instead
+# of deployment-multiarch.yaml's implicit weight-based default.
+#
+# Still requires a genuinely multi-arch image:
+#   docker buildx build --platform linux/amd64,linux/arm64 -t <repo>:<tag> --push .
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-multiarch-prefer-arm64
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web-multiarch-prefer-arm64 }
+  template:
+    metadata:
+      labels: { app: web-multiarch-prefer-arm64 }
+    spec:
+      affinity:
+        nodeAffinity:
+          # "preferred", not "required" — if no arm64 capacity is available,
+          # Karpenter falls back to amd64 rather than leaving the pod
+          # Pending. Use this instead of a hard nodeSelector when
+          # availability matters more than always being on Graviton.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values: ["arm64"]
+
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-multiarch-prefer-arm64 }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-multiarch-prefer-arm64 }
+
+      containers:
+        - name: web
+          image: public.ecr.aws/nginx/nginx-unprivileged:stable
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-multiarch-prefer-arm64
+  namespace: demo
+spec:
+  minAvailable: 1 # of 2 replicas
+  selector:
+    matchLabels: { app: web-multiarch-prefer-arm64 }

@@ -1,0 +1,102 @@
+# Run this workload on Graviton (arm64) nodes.
+#
+# Copy this file, change the image and the name, and ship. You do not need to
+# know anything about Karpenter, NodePools, or instance types to use it.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-graviton
+  namespace: demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: web-graviton }
+  template:
+    metadata:
+      labels: { app: web-graviton }
+    spec:
+      # ---------------------------------------------------------------
+      # THIS IS THE ONLY LINE THAT PICKS THE ARCHITECTURE.
+      # kubernetes.io/arch is a standard Kubernetes label that the kubelet
+      # sets on every node. You do not need to know anything about
+      # Karpenter, node pools, or instance types to use it.
+      # ---------------------------------------------------------------
+      nodeSelector:
+        kubernetes.io/arch: arm64
+
+      # Spread across nodes so a single Spot reclaim cannot take out every
+      # replica. ScheduleAnyway, not DoNotSchedule: on a cold cluster there
+      # is exactly one node, and a hard constraint would leave replicas
+      # Pending forever.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-graviton }
+        # The cluster pays for three AZs so that Spot has room to work with.
+        # No NodePool carries a topology.kubernetes.io/zone requirement, so
+        # without this constraint all three replicas could land in one AZ
+        # and the other two AZs would be pure cost. This is the line that
+        # makes the AZ spread real for this workload.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-graviton }
+
+      containers:
+        - name: web
+          # public.ecr.aws, not Docker Hub — a cluster behind one NAT gateway
+          # is one source IP, and Docker Hub's anonymous pull rate limit
+          # bites a shared cluster fast.
+          #
+          # nginx-unprivileged: uid 101, listens on 8080 (not 80, which would
+          # need the NET_BIND_SERVICE capability — dropped below). Verified
+          # genuinely multi-arch (linux/amd64 and linux/arm64).
+          image: public.ecr.aws/nginx/nginx-unprivileged:stable
+          ports:
+            - containerPort: 8080
+          # Resource REQUESTS are what Karpenter does its maths on. Without
+          # them Karpenter assumes the pod is ~0-cost and will happily pack
+          # it onto an existing node instead of provisioning a new one.
+          # No CPU limit is set on purpose — a CPU limit only throttles you,
+          # it buys nothing a request doesn't already give Karpenter.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          # Required by the `demo` namespace's `restricted` Pod Security
+          # profile (every pod needs this, not just Karpenter workloads).
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101 # this image's USER; required, see above
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault } # required by PSA `restricted`
+          # readOnlyRootFilesystem needs somewhere writable. This image's
+          # nginx.conf already points its pidfile and all *_temp_path
+          # directives at /tmp (verified against the image directly), so one
+          # emptyDir is enough — no /var/cache/nginx or /var/run mount needed.
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-graviton
+  namespace: demo
+spec:
+  minAvailable: 2 # of 3 replicas
+  selector:
+    matchLabels: { app: web-graviton }
+# Karpenter honours PDBs when it drains a node for consolidation or an
+# interruption. Without one it will drain all three replicas at once.
+# A pod that must never be interrupted can also carry the annotation
+#   karpenter.sh/do-not-disrupt: "true"
+# — use it sparingly: it blocks consolidation and node expiry too.

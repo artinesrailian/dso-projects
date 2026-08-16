@@ -1,0 +1,76 @@
+# Run this workload on x86 (amd64) nodes.
+#
+# Identical to deployment-arm64.yaml except for the architecture label, the
+# name and the labels. That symmetry is the point: to move a workload
+# between architectures, exactly one line changes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-x86
+  namespace: demo
+spec:
+  replicas: 3
+  selector:
+    matchLabels: { app: web-x86 }
+  template:
+    metadata:
+      labels: { app: web-x86 }
+    spec:
+      # ---------------------------------------------------------------
+      # THIS IS THE ONLY LINE THAT PICKS THE ARCHITECTURE.
+      # kubernetes.io/arch is a standard Kubernetes label that the kubelet
+      # sets on every node. You do not need to know anything about
+      # Karpenter, node pools, or instance types to use it.
+      # ---------------------------------------------------------------
+      nodeSelector:
+        kubernetes.io/arch: amd64
+
+      # Spread across nodes so a single Spot reclaim cannot take out every
+      # replica. ScheduleAnyway, not DoNotSchedule: on a cold cluster there
+      # is exactly one node, and a hard constraint would leave replicas
+      # Pending forever.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-x86 }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-x86 }
+
+      containers:
+        - name: web
+          # public.ecr.aws, not Docker Hub — see deployment-arm64.yaml for why.
+          image: public.ecr.aws/nginx/nginx-unprivileged:stable
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101 # this image's USER; required, see deployment-arm64.yaml
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault } # required by PSA `restricted`
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-x86
+  namespace: demo
+spec:
+  minAvailable: 2 # of 3 replicas
+  selector:
+    matchLabels: { app: web-x86 }

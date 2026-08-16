@@ -512,11 +512,148 @@ docs/phases/phase-06-demo-workloads.md and stop. Do not start Phase 7.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE — all offline acceptance criteria pass (kubeconform, the python parse fallback,
+  and every grep assertion in the "Without credentials" section, run and corrected for two
+  false-positive greps from my own comments, see Verification run). The "With credentials"
+  acceptance criteria could not be run — no EKS/Karpenter cluster is reachable, see below.
 
-- Status:
 - Files created/changed:
+  - `examples/README.md` — **new.** Developer-facing, ~one screen (94 lines): access, run on
+    Graviton, run on x86, the recommended multi-arch pattern (+ the soft-preference variant),
+    proving it with the Job, cleanup, the `exec format error` caveat, and short answers on quota,
+    Pod Security, Pod Identity (§6.8) and application secrets.
+  - `examples/deployment-arm64.yaml` — **new.** `web-graviton` Deployment (3 replicas) +
+    `PodDisruptionBudget`, per §6.3 verbatim: `nodeSelector: {kubernetes.io/arch: arm64}`,
+    `topologySpreadConstraints` (hostname + zone), `nginx-unprivileged` on 8080,
+    `readOnlyRootFilesystem: true` with a single `/tmp` `emptyDir`, full `restricted`-profile
+    `securityContext`.
+  - `examples/deployment-x86.yaml` — **new.** Identical structure, `kubernetes.io/arch: amd64`,
+    `web-x86` naming — per §6.4, "exactly one line changes."
+  - `examples/deployment-multiarch.yaml` — **new.** `web-multiarch`, no `nodeSelector` at all —
+    demonstrates §6.5's pattern 1 (NodePool weight alone decides, lands on arm64 by default).
+  - `examples/deployment-multiarch-preferred.yaml` — **new, not in the original file list** (see
+    Deviation #1). `web-multiarch-prefer-arm64` — demonstrates §6.5's pattern 2, a soft
+    `preferredDuringSchedulingIgnoredDuringExecution` toward arm64 with an amd64 fallback.
+  - `examples/job-arch-check.yaml` — **new.** `arch-check` Job per §6.6, with the
+    `INSTANCE_TYPE` downward-API `fieldRef` removed (see Deviation #2) and the container's
+    `resources.requests.memory` raised to `100Mi` to clear the `demo` namespace LimitRange's
+    `min: 64Mi` floor (phase-05 §5.3c) with margin, since §6.6's own example carried no resources
+    block at all.
+  - `docs/contracts/interface-contract.md` — §1's `examples/` tree amended: added `README.md` (was
+    missing from the tree, though phase-06 §"Files to create" already listed it — bringing the tree
+    in line with the file list) and `deployment-multiarch-preferred.yaml`, per the contract's own
+    rule that a new name must be added in the same change that introduces it.
+
 - Deviations from spec:
-- **Actual `kubectl logs -n demo job/arch-check` output** (or why it could not be run):
+  1. **File count reconciled at 6, by splitting the multi-arch pattern into two files.** The
+     phase's own "Files to create" list enumerates 5 files (README + 4 YAML), but its "Notes for
+     the implementing agent" says "Keep the total to six files," and §6.5 requires demonstrating
+     **two** distinct pod specs (no-`nodeSelector`-at-all, and a soft `nodeAffinity` preference) —
+     which cannot both be one Deployment. Rather than cramming two Deployments into one
+     `deployment-multiarch.yaml` (defensible, but muddies "copy one file, change the image, ship"
+     for a developer who wants only the plain pattern) I split them: `deployment-multiarch.yaml`
+     keeps §6.5 pattern 1, and the new `deployment-multiarch-preferred.yaml` holds pattern 2. That
+     reaches six files exactly and matches the doc's own note; the interface-contract tree and this
+     report record the new name per the contract's own rule. If a later phase's README or `verify.sh`
+     enumerates `examples/*.yaml` by a hardcoded list rather than a glob, it needs this filename too.
+  2. **`job-arch-check.yaml`'s `INSTANCE_TYPE` env var was removed**, per the phase doc's own
+     instruction to verify and drop it rather than ship blank output. Confirmed by reasoning about
+     the downward API, not by a live cluster (none was reachable): `fieldRef` on `metadata.labels`
+     resolves against the **pod's own** labels, not the node's. The pod carries no
+     `node.kubernetes.io/instance-type` label — nothing sets one — so the field would either fail
+     admission (an unknown label reference) or render as an empty string; either way it is not usable
+     evidence. `NODE_NAME` (via `spec.nodeName`) was kept — that field genuinely exists on every pod.
+     The README's arch-check step and its "other things worth knowing" both point the reader at
+     `kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type`
+     instead.
+  3. **`readOnlyRootFilesystem: true` + a single `/tmp` `emptyDir` was verified empirically, not
+     from recall.** Pulled `public.ecr.aws/nginx/nginx-unprivileged:stable` directly (`docker pull`)
+     and read its actual `/etc/nginx/nginx.conf`: `pid`, `proxy_temp_path`, `client_body_temp_path`,
+     `fastcgi_temp_path`, `uwsgi_temp_path` and `scgi_temp_path` are all under `/tmp`; `access.log`
+     and `error.log` are symlinks to `/dev/stdout`/`/dev/stderr`, not real files. Then ran the
+     container with `docker run --read-only --tmpfs /tmp -u 101 --cap-drop=ALL
+     --security-opt=no-new-privileges` (matching the shipped `securityContext` field-for-field) and
+     confirmed it starts cleanly and serves `HTTP 200` on `:8080` — no `/var/cache/nginx` or
+     `/var/run` mount was needed, matching §6.3's spec exactly. Also confirmed via
+     `docker inspect`/`docker manifest inspect` that both `nginx-unprivileged:stable` (`User=101`,
+     `ExposedPorts=8080/tcp`) and `busybox:latest` (`User=` — empty, i.e. root) are genuinely
+     multi-arch (`linux/amd64` and `linux/arm64` both present in each manifest list), confirming the
+     spec's own claims rather than trusting them.
+  4. **Added `topologySpreadConstraints` and a `PodDisruptionBudget` to
+     `deployment-multiarch.yaml`/`-preferred.yaml`**, which §6.5 does not show explicitly (only
+     §6.3's arm64 example spells them out). The same Spot-first reasoning §6.3 gives — one
+     consolidation or Spot reclaim can otherwise take a 2-replica deployment to zero — applies
+     identically to the multi-arch pair, so both carry the same spread/PDB pattern as
+     `deployment-arm64.yaml`/`deployment-x86.yaml` rather than shipping unprotected.
+  5. Every container's `securityContext` omits a CPU `limit` (only a memory `limit` is set),
+     matching §6.3's own example literally rather than adding one — an unset CPU limit lets the
+     workload burst without throttling and is not what S-61 ("requests and limits on every
+     container") is protecting against; the LimitRange's `default: {cpu: "1", ...}` (phase-05
+     §5.3c) fills in a CPU limit automatically at admission if a cluster operator wants one enforced.
+
+- Names added to interface-contract.md: `examples/README.md` and
+  `examples/deployment-multiarch-preferred.yaml`, both added to §1's `examples/` tree — see
+  Deviation #1 and the `docs/contracts/interface-contract.md` entry under "Files created/changed"
+  above for why.
+
+- **Actual `kubectl logs -n demo job/arch-check` output** (or why it could not be run): **Not
+  run — no EKS/Karpenter cluster reachable.** The only `kubectl` context configured on this
+  machine (`panda-dev-admin@panda-dev`, API server at a private/local IP) is an unrelated cluster:
+  `kubectl get namespace demo` → `NotFound`, and `kubectl get nodepools` → `the server doesn't have
+  a resource type "nodepools"` (no Karpenter CRDs installed). Applying these manifests there would
+  prove nothing about this deliverable and would write into a cluster this assessment does not own,
+  so nothing was applied. No AWS credentials for the target account were available either
+  (consistent with phase-05's completion report, which also ran with no credentials).
+
 - Verification run:
-- Notes for the next phase:
+  ```
+  $ cd examples
+  $ kubeconform -strict -summary -kubernetes-version 1.36.0 *.yaml
+  Summary: 9 resources found in 5 files - Valid: 9, Invalid: 0, Errors: 0, Skipped: 0
+
+  $ python3 -c "import yaml,sys; [list(yaml.safe_load_all(open(f))) for f in sys.argv[1:]]; print('PASS: all files parse')" *.yaml
+  PASS: all files parse
+
+  $ [ -e namespace.yaml ] && echo FAIL || echo "PASS: no namespace.yaml"
+  PASS: no namespace.yaml
+
+  $ grep -h 'image:' *.yaml | grep -vE '^\s*#' | grep -v 'public.ecr.aws' && echo FAIL || echo "PASS: all real image: fields are public ECR"
+  PASS: all real image: fields are public ECR
+  # (the spec's literal one-line grep without comment-stripping produces one false positive: a
+  # comment in deployment-multiarch-preferred.yaml containing the word "image:". Re-run with
+  # comments stripped, matching the comment-stripping pattern phase-05's own acceptance script
+  # already uses for its Balanced/instanceProfile checks, for the real answer.)
+
+  $ grep -l 'kubernetes.io/arch: arm64' *.yaml
+  deployment-arm64.yaml
+  job-arch-check.yaml
+  $ grep -l 'kubernetes.io/arch: amd64' *.yaml
+  deployment-x86.yaml
+
+  $ for f in *.yaml; do grep -q 'runAsNonRoot: true' "$f" && ! grep -q 'runAsUser:' "$f" && echo "FAIL: $f"; done
+  (no output — PASS, every pod asserting runAsNonRoot pins runAsUser)
+
+  $ for f in deployment-*.yaml job-*.yaml; do grep -q 'seccompProfile' "$f" || echo "FAIL: $f"; done
+  (no output — PASS, every pod carries seccompProfile)
+  ```
+  Additionally checked, beyond the spec's own script: no `karpenter.sh/nodepool` or
+  `karpenter.sh/discovery` label anywhere in `examples/` (grep clean) — architecture selection is
+  `kubernetes.io/arch` only, no NodePool name leaks into a manifest. Summed
+  `resources.requests` × `replicas` across all four Deployments plus the Job against the `demo`
+  namespace's ResourceQuota (phase-05 §5.3c: `requests.cpu: "20"`, `requests.memory: "40Gi"`) —
+  totals ~4.1 vCPU / ~2.6Gi, comfortably under quota. Checked every container's requests/limits
+  against the namespace LimitRange's Container-type `min` (`cpu: 50m`, `memory: 64Mi`) and `max`
+  (`cpu: "4"`, `memory: 8Gi`) — all within bounds (this is what caught the Job's original
+  under-floor memory request, Deviation above). `docker manifest inspect` confirmed both images are
+  multi-arch; `docker run` confirmed the `nginx-unprivileged` + `readOnlyRootFilesystem` combination
+  actually starts and serves traffic (Deviation #3).
+
+- Notes for the next phase: Phase 7 (README) can link straight to `examples/README.md` rather than
+  duplicating its content — that file already owns the developer-facing walkthrough end to end.
+  Phase 7 or Phase 8's `verify.sh`, if it runs the "With credentials" acceptance criteria from this
+  phase for real, should also apply `deployment-multiarch-preferred.yaml` alongside
+  `deployment-multiarch.yaml` (glob `examples/*.yaml` rather than a hardcoded per-file list, so the
+  new filename isn't silently skipped). No AWS/EKS credentials were available in this session, so
+  every "With credentials" acceptance command in this phase — including the one line the assignment
+  actually turns on, `kubectl logs -n demo job/arch-check` — is still unverified end to end and
+  should be the first thing run against a real cluster before this deliverable is called complete.
