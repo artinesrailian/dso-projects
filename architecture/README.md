@@ -18,8 +18,8 @@ Prepared for Innovate Inc. | Version 1.0
 - [8. Growth Roadmap](#8-growth-roadmap)
 - [9. Well-Architected Framework Alignment](#9-well-architected-framework-alignment)
 - [10. Summary of Key Decisions](#10-summary-of-key-decisions)
+- [Appendix A — Glossary](#appendix-a--glossary)
 - [Appendix B — Architecture Decision Records](#appendix-b--architecture-decision-records)
-- [Appendix D — Glossary](#appendix-d--glossary)
 
 ## Executive Summary
 
@@ -1299,6 +1299,64 @@ traceable in one place, not to repeat the argument.
 
 ---
 
+## Appendix A — Glossary
+
+Written for a founder who has never opened the AWS console.
+
+- **Architecture Decision Record (ADR)** — a short record of one decision: what was chosen, what it
+  beat, and why.
+- **Aurora** — Amazon's managed PostgreSQL database; it handles backups, patching, and failover
+  automatically.
+- **Availability Zone (AZ)** — one of several physically separate data centers in an AWS region.
+- **Canary deployment** — releasing a new version to a small slice of traffic first, then widening it
+  only if nothing looks wrong.
+- **CIDR block** — a written range of network addresses, such as `10.30.0.0/16`.
+- **Container image** — a packaged copy of an application that runs the same wherever it is started.
+- **Container registry** — where container images are stored and pulled from before they run.
+- **Amazon EKS (Elastic Kubernetes Service)** — Amazon's managed version of Kubernetes; AWS keeps the
+  control software patched.
+- **GitOps** — deploying software by having the running system continuously copy what a version-
+  controlled file says should be running, rather than an outside tool pushing changes to it.
+- **Graviton** — Amazon's own processor design, cheaper and more energy-efficient than the common
+  alternative for typical workloads.
+- **Horizontal Pod Autoscaler (HPA)** — adds or removes running copies of the application automatically
+  as demand rises or falls.
+- **IAM (Identity and Access Management)** — Amazon's system for deciding who, or what software, may do
+  what inside an AWS account.
+- **Karpenter** — software that starts a right-sized computer the moment work is waiting to run, and
+  removes it once it is not needed.
+- **KMS (AWS Key Management Service)** — the AWS service that creates and controls the keys that
+  encrypt stored data.
+- **Namespace** — a named subdivision inside a Kubernetes cluster that keeps one team's or
+  application's resources separate from another's.
+- **NAT Gateway** — lets computers on a private network reach the internet without being reachable
+  from it.
+- **Node** — one computer, physical or virtual, that runs application copies for Kubernetes.
+- **Point-in-time recovery (PITR)** — restoring a database to exactly how it looked at a chosen moment
+  in the recent past.
+- **Pod** — the smallest unit Kubernetes runs: one or more containers started, stopped, and moved
+  together.
+- **Recovery point objective (RPO)** — how much recent data a system can afford to lose if something
+  fails.
+- **Recovery time objective (RTO)** — how long a system can afford to be down before service is
+  restored.
+- **Security group** — a virtual firewall on one resource, controlling exactly what can connect to it.
+- **Service control policy (SCP)** — an organization-wide rule limiting what any account beneath it may
+  do.
+- **Service level objective (SLO)** — a target for how well a system should perform, agreed in advance.
+- **Spot Instance** — spare AWS computing capacity at a steep discount, reclaimable on short notice.
+- **Subnet** — a smaller, named section of a network, usually tied to one location and one purpose.
+- **Three-tier architecture** — separating a system into presentation, application, and data layers, so
+  each is built, secured, and scaled on its own.
+- **VPC (virtual private cloud)** — a private, isolated section of AWS's network for one team's or
+  environment's use.
+- **WAF (AWS Web Application Firewall)** — a filter that blocks known attack patterns before they reach
+  the application.
+- **Well-Architected Framework** — AWS's published design principles, organized into six themes, used
+  here to check this design's trade-offs are made on purpose.
+
+---
+
 ## Appendix B — Architecture Decision Records
 
 An Architecture Decision Record (ADR) captures one significant decision in a fixed structure: the
@@ -1716,61 +1774,3 @@ see the AWS Pricing Calculator.
 
 **Revisit when.** The business no longer needs to economize this hard, or an enterprise customer
 contractually requires a staging environment that mirrors production.
-
----
-
-## Appendix D — Glossary
-
-Written for a founder who has never opened the AWS console.
-
-- **Architecture Decision Record (ADR)** — a short record of one decision: what was chosen, what it
-  beat, and why.
-- **Aurora** — Amazon's managed PostgreSQL database; it handles backups, patching, and failover
-  automatically.
-- **Availability Zone (AZ)** — one of several physically separate data centers in an AWS region.
-- **Canary deployment** — releasing a new version to a small slice of traffic first, then widening it
-  only if nothing looks wrong.
-- **CIDR block** — a written range of network addresses, such as `10.30.0.0/16`.
-- **Container image** — a packaged copy of an application that runs the same wherever it is started.
-- **Container registry** — where container images are stored and pulled from before they run.
-- **Amazon EKS (Elastic Kubernetes Service)** — Amazon's managed version of Kubernetes; AWS keeps the
-  control software patched.
-- **GitOps** — deploying software by having the running system continuously copy what a version-
-  controlled file says should be running, rather than an outside tool pushing changes to it.
-- **Graviton** — Amazon's own processor design, cheaper and more energy-efficient than the common
-  alternative for typical workloads.
-- **Horizontal Pod Autoscaler (HPA)** — adds or removes running copies of the application automatically
-  as demand rises or falls.
-- **IAM (Identity and Access Management)** — Amazon's system for deciding who, or what software, may do
-  what inside an AWS account.
-- **Karpenter** — software that starts a right-sized computer the moment work is waiting to run, and
-  removes it once it is not needed.
-- **KMS (AWS Key Management Service)** — the AWS service that creates and controls the keys that
-  encrypt stored data.
-- **Namespace** — a named subdivision inside a Kubernetes cluster that keeps one team's or
-  application's resources separate from another's.
-- **NAT Gateway** — lets computers on a private network reach the internet without being reachable
-  from it.
-- **Node** — one computer, physical or virtual, that runs application copies for Kubernetes.
-- **Point-in-time recovery (PITR)** — restoring a database to exactly how it looked at a chosen moment
-  in the recent past.
-- **Pod** — the smallest unit Kubernetes runs: one or more containers started, stopped, and moved
-  together.
-- **Recovery point objective (RPO)** — how much recent data a system can afford to lose if something
-  fails.
-- **Recovery time objective (RTO)** — how long a system can afford to be down before service is
-  restored.
-- **Security group** — a virtual firewall on one resource, controlling exactly what can connect to it.
-- **Service control policy (SCP)** — an organization-wide rule limiting what any account beneath it may
-  do.
-- **Service level objective (SLO)** — a target for how well a system should perform, agreed in advance.
-- **Spot Instance** — spare AWS computing capacity at a steep discount, reclaimable on short notice.
-- **Subnet** — a smaller, named section of a network, usually tied to one location and one purpose.
-- **Three-tier architecture** — separating a system into presentation, application, and data layers, so
-  each is built, secured, and scaled on its own.
-- **VPC (virtual private cloud)** — a private, isolated section of AWS's network for one team's or
-  environment's use.
-- **WAF (AWS Web Application Firewall)** — a filter that blocks known attack patterns before they reach
-  the application.
-- **Well-Architected Framework** — AWS's published design principles, organized into six themes, used
-  here to check this design's trade-offs are made on purpose.

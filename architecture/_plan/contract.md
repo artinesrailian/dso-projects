@@ -422,15 +422,18 @@ name survives if anything ever shifts.
 | **§8** | Growth Roadmap | draft 09, part two |
 | **§9** | Well-Architected Framework Alignment | draft 09, part one |
 | **§10** | Summary of Key Decisions | Phase 12 |
+| **App. A** | Glossary | Phase 12 |
 | **App. B** | Architecture Decision Records | Phase 12, from the drafts |
-| **App. D** | Glossary | Phase 12 |
 
-> Appendices A (Requirement Traceability) and C (Diagrams) were removed by explicit human instruction
-> on 2026-08-16 — see `STATE.md`'s Plan amendments. Neither is part of the final section map; do not
-> re-add either. Diagrams 2–4 remain embedded in §1.3, §2.2, and §3.9 as they always were; diagram 5
-> (the authenticated request flow) is no longer embedded anywhere in `README.md` and exists only as
-> `diagrams/05-request-flow.md`, pointed to from the Executive Summary alongside the rest of
-> `diagrams/`.
+> The original Appendix A (Requirement Traceability) and Appendix C (Diagrams) were removed by
+> explicit human instruction on 2026-08-16 — see `STATE.md`'s Plan amendments. Diagrams 2–4 remain
+> embedded in §1.3, §2.2, and §3.9 as they always were; diagram 5 (the authenticated request flow) is
+> no longer embedded anywhere in `README.md` and exists only as `diagrams/05-request-flow.md`, pointed
+> to from the Executive Summary alongside the rest of `diagrams/`. The former Appendix D (Glossary) was
+> then relettered to **Appendix A** to close the resulting gap, and moved ahead of the ADR appendix in
+> the document so the lettering matches reading order; it is unrelated in content to the original
+> Appendix A. There is no Appendix C or D in the final document — only A (Glossary) and B (Architecture
+> Decision Records).
 
 Subsection numbering within each chapter is fixed in
 [`phases/phase-11-assembly.md`](phases/phase-11-assembly.md). The ones most often cited from
