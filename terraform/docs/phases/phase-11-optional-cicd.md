@@ -187,17 +187,7 @@ pre-commit run --config .pre-commit-config.yaml --all-files
 ```text
 Implement Phase 11 (OPTIONAL) of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/dso-projects/terraform
-
-SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
-     Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
-     UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
-  3. Create NOTHING at the repository root. In particular do NOT create .github/ at the root,
-     even though that is where GitHub Actions workflows normally live — phase-11 §"scope
-     conflict" explains how to handle that, and you must follow it.
-  4. Do not run repo-wide searches. Scope every search to terraform/.
+Working directory: terraform/
 
 Read: docs/phases/phase-11-optional-cicd.md (your specification), then
       docs/contracts/security-checklist.md (S-93, S-94).
@@ -221,11 +211,4 @@ docs/phases/phase-11-optional-cicd.md and stop.
 
 ---
 
-## Completion report
-
-- Status:
-- Files created/changed:
-- **Confirm nothing was created at the repository root:**
-- **Scanner triage table** (or where it lives):
-- Deviations from spec:
-- Notes:
+*This optional phase was not implemented. See `docs/README.md` for what was built and what was skipped.*

@@ -9,28 +9,7 @@ It is documentation, not deployable code. The deliverable itself is the rest of 
 > *"Please place your technical assignment solution under the `terraform/` folder in the repository
 > root."*
 
----
-
-## 🛑 Scope boundary
-
-The repository root holds **two unrelated assessments**:
-
-```
-opsfleet/
-├── architecture/     ← A DIFFERENT ASSESSMENT. Out of scope. Never touch it.
-└── terraform/        ← This assessment. The working directory for every phase.
-```
-
-Every agent that implements a phase must:
-
-1. Use `terraform/` as its working directory and never leave it.
-2. Never read, write, list, grep or `cd` into `architecture/`.
-3. Create nothing at the repository root — no new files, no new sibling directories. Everything,
-   including `.gitignore` and any CI config, lives under `terraform/`.
-4. Never run repo-wide commands (`grep -r` from the root, `find` from the root, root `git status`).
-
-Every phase's copy-paste prompt already carries this as a non-negotiable preamble. **All paths in
-every document here are relative to `terraform/`.**
+**All paths in every document here are relative to `terraform/`.**
 
 ---
 
@@ -169,21 +148,31 @@ the interface contract rather than the implemented file. Everything else is stri
 
 ---
 
-## Status tracker
+## What was built, and what was not
 
-Update as phases land.
+**All nine core phases (0–8) were implemented.** Each phase's own document ends with a completion
+report recording what was actually built, every deviation from the spec, and what it could not
+verify — those reports are the detailed record; this is the summary.
 
-| Phase | Status | Notes |
-|---|---|---|
-| 0 Scaffold & state | ☐ Not started | |
-| 1 Networking | ☐ Not started | |
-| 2 EKS cluster | ☐ Not started | |
-| 3 Karpenter AWS | ☐ Not started | |
-| 4 Karpenter Helm | ☐ Not started | |
-| 5 NodePools | ☐ Not started | |
-| 6 Demo workloads | ☐ Not started | |
-| 7 README | ☐ Not started | |
-| 8 Verification | ☐ Not started | |
-| 9 ALB controller *(opt)* | ☐ Not started | |
-| 10 metrics/HPA *(opt)* | ☐ Not started | |
-| 11 CI/CD *(opt)* | ☐ Not started | |
+| Built | |
+|---|---|
+| **0 Scaffold & state** | Root module, 46 variables with validation, `Makefile`, and a separate `bootstrap/` root module for the encrypted S3 + KMS state backend. |
+| **1 Networking** | `modules/network` — 3-AZ VPC with private/public/intra subnets, NAT, flow logs, discovery tagging, and 12 optional interface endpoints (off by default, ~$263/mo). |
+| **2 EKS control plane** | `modules/eks` — cluster on access-entry auth, CMK envelope encryption with a disable/delete detector, five control-plane log types, five add-ons, and a Graviton bootstrap node group. |
+| **3 Karpenter (AWS side)** | `modules/karpenter` — controller and node IAM via Pod Identity, SQS interruption queue, EventBridge rules, `EC2_LINUX` node access entry. |
+| **4 Karpenter (Helm)** | Two pinned releases — `karpenter-crd` then `karpenter` — with the CoreDNS-deadlock and CRD-upgrade fixes applied. |
+| **5 NodePools** | `modules/cluster-resources` — `amd64` + `arm64` NodePools on Spot + On-Demand, the `default` EC2NodeClass, a `gp3` StorageClass, and the governed-namespace guardrails (PSA, ResourceQuota, LimitRange, developer ClusterRole). |
+| **6 Demo workloads** | `examples/` — Graviton, x86 and two multi-arch patterns, plus an arch-check Job. |
+| **7 README** | The graded artifact, `README.md`, with separate developer and platform-engineer sections. |
+| **8 Verification & teardown** | `scripts/verify.sh`, `scripts/teardown.sh`, and [`AUDIT.md`](AUDIT.md) — the hardening sign-off. |
+
+| Not built | Why |
+|---|---|
+| **9 AWS Load Balancer Controller** | Optional; not requested. No ingress path exists, and the demo namespace quota sets `services.loadbalancers: 0`. |
+| **10 metrics-server & HPA** | Optional; not requested. No `kubectl top` and no HPA. Karpenter node autoscaling is unaffected — it works from pending-pod requests, not metrics. |
+| **11 CI/CD & policy scanning** | Optional; not requested. `make check` runs the same static gates locally, but nothing enforces them on a change. Tracked as ❌ in [`AUDIT.md`](AUDIT.md) (S-93, S-94). |
+
+> **The stack has never been applied to an AWS account.** No credentials were available in any
+> phase. Everything above is `fmt`/`validate`/`test`-clean and cross-checked against pinned upstream
+> module source, but no `terraform apply` has run. [`AUDIT.md`](AUDIT.md) states this per requirement
+> and marks every row accordingly.

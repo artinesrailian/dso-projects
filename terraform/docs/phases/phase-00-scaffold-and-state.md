@@ -621,21 +621,7 @@ grep -q '\.terraform\.lock\.hcl' .gitignore && echo "FAIL: lock file must NOT be
 ```text
 Implement Phase 0 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/dso-projects/terraform
-
-SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
-     Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
-     UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
-     There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
-     no new directories, no sibling of terraform/ or architecture/. Everything you produce
-     lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
-     `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
-  If you believe you genuinely need something outside terraform/, stop and say so in your
-  completion report instead of doing it.
+Working directory: terraform/
 
 Read these files first, in this order:
   1. docs/00-architecture-and-decisions.md      (context and decisions)
@@ -732,12 +718,12 @@ and stop. Do not start Phase 1.
      matched the correct answer.
   6. **One scope-boundary slip, self-reported.** While spot-checking the working
      tree I ran `git status --porcelain` once at the actual repository root
-     (`/home/artin/personal/git/dso-projects`) instead of scoped to `terraform/`,
-     which the task's scope boundary explicitly forbids ("Do not run ... `git
-     status` at the root"). It was read-only. Its output showed no changes under
-     `architecture/` — it was never read, written, or listed as a result — and I
-     immediately re-ran the same check properly scoped (`git status --porcelain .`
-     from within `terraform/`) and used only that from then on.
+     instead of scoped to `terraform/`, which the task's scope boundary
+     explicitly forbids ("Do not run ... `git status` at the root"). It was
+     read-only. Its output showed no changes outside `terraform/` — nothing
+     else was read, written, or listed as a result — and I immediately re-ran
+     the same check properly scoped (`git status --porcelain .` from within
+     `terraform/`) and used only that from then on.
   7. **`Makefile`'s `destroy` target — added the G-09 guard rule §0.10 actually
      requires, which the section's own literal code snippet omitted.** §0.10's
      "Two rules for whoever writes this" states: "`destroy` must call
@@ -848,4 +834,4 @@ and stop. Do not start Phase 1.
   - Acceptance-criteria commands were run with `terraform/` as the working
     directory throughout (never the true repository root) — the task's own
     scope boundary requires this, since e.g. `terraform fmt -recursive` from the
-    real root would incorrectly reach into `architecture/`.
+    real root would incorrectly reach outside `terraform/`.

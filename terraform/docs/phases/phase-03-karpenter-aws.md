@@ -302,21 +302,7 @@ aws events list-rules --query "Rules[?contains(Name,'Karpenter')].Name"
 ```text
 Implement Phase 3 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/dso-projects/terraform
-
-SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
-     Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
-     UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
-     There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
-     no new directories, no sibling of terraform/ or architecture/. Everything you produce
-     lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
-     `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
-  If you believe you genuinely need something outside terraform/, stop and say so in your
-  completion report instead of doing it.
+Working directory: terraform/
 
 Read these files first, in this order:
   1. docs/00-architecture-and-decisions.md          (ADR-4, ADR-5)

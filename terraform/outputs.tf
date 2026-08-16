@@ -4,6 +4,11 @@
 # output. See interface-contract.md SS4 for the full, final list this file
 # must converge on.
 
+output "region" {
+  description = "The deployed region. Consumed by scripts/teardown.sh, which must issue every AWS CLI call against the same region Terraform used."
+  value       = var.region
+}
+
 output "vpc_id" {
   description = "ID of the dedicated VPC."
   value       = module.network.vpc_id
@@ -78,4 +83,9 @@ output "karpenter_node_iam_role_arn" {
 output "karpenter_interruption_queue_name" {
   description = "SQS queue for Spot interruption / rebalance events."
   value       = module.karpenter.interruption_queue_name
+}
+
+output "developer_rbac_group" {
+  description = "The Kubernetes group developers are bound to. Consumed by scripts/verify.sh's `kubectl auth can-i --as-group` assertions."
+  value       = var.developer_rbac_group
 }
