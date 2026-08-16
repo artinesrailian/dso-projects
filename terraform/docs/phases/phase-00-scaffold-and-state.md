@@ -663,11 +663,143 @@ and stop. Do not start Phase 1.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE
 
-- Status:
 - Files created/changed:
+  - `.gitignore` — already present and already matched spec exactly; no change needed.
+  - `versions.tf`, `providers.tf`, `backend.tf`, `backend.hcl.example`, `locals.tf`,
+    `variables.tf`, `outputs.tf` (header only), `main.tf` (header only),
+    `terraform.tfvars.example`, `budget.tf`, `quotas.tf`, `Makefile`
+  - `tests/cidr_guard.tftest.hcl`
+  - `bootstrap/versions.tf`, `bootstrap/variables.tf`, `bootstrap/main.tf`,
+    `bootstrap/outputs.tf`, `bootstrap/README.md`
+  - `docs/contracts/interface-contract.md` — amended (see "Names added" below); no
+    other doc files changed.
+  - No `modules/` directory created. No `helm` or `kubernetes` provider added.
+
 - Deviations from spec:
-- Names added to interface-contract.md:
-- Verification run:
+  1. **`budget.tf` cost_filter — corrected a broken escape in the spec's own snippet.**
+     Phase-00 §0.7b's literal example writes
+     `values = ["user:Project$${var.project_name}"]`. Empirically verified (via a
+     throwaway `terraform apply` in a scratch config) that Terraform's `$${`
+     sequence is the documented escape for a **literal** `${`, so that snippet
+     renders as the uninterpolated string `"user:Project${var.project_name}"` —
+     never matching the real `Project` tag value. That would make the tag-filtered
+     budget's cost_filter match nothing, i.e. a cost control that looks present but
+     is silently inert. Used `format("user:Project$%s", var.project_name)` instead
+     (verified it renders `"user:Project$opsfleet"` correctly) and left a comment
+     in `budget.tf` explaining the trap.
+  2. **`tests/cidr_guard.tftest.hcl` — added `budget_notification_email` to all
+     three `run` blocks.** Not present in phase-00 §0.6b's literal snippet. Needed
+     because §0.7b separately requires a `validation` on `budget_notification_email`
+     (non-empty when `enable_budget_alarm` is true, which defaults `true`), and
+     without an explicit value every run would additionally fail that unrelated
+     validation — breaking `expect_failures` matching on the two rejecting runs and
+     breaking the clean pass on `accepts_scoped_allowlist`. Verified all three runs
+     now pass with exactly the intended single failure (or none) per run.
+  3. **`namespace_quota` object fields — fixed to match Phase 5's chart template,
+     not invented from scratch.** Interface-contract §3 only specifies `object`
+     with a prose description of the default shape; no field names. First pass
+     invented `max_loadbalancers`; checking `docs/phases/phase-05-nodepools.md`
+     §5.3c (already written) showed the chart template reads exactly five fields —
+     `.Values.namespaceQuota.requestsCpu/requestsMemory/limitsCpu/limitsMemory/maxDeployments`
+     — and hardcodes `services.loadbalancers: "0"` directly in the template rather
+     than templating it from any variable. Revised `namespace_quota` to
+     `{ requests_cpu, requests_memory, limits_cpu, limits_memory, max_deployments }`
+     (snake_case in Terraform; Phase 5 maps to camelCase when it builds the Helm
+     values) and dropped the unused loadbalancers field.
+  4. **`bootstrap/`'s `provider "aws"` block lives in `bootstrap/versions.tf`**,
+     not a separate `bootstrap/providers.tf` — the latter isn't in phase-00's
+     "Files to create" list, but a standalone root module needs a provider block
+     somewhere to be usable, and `versions.tf` is the file that already declares
+     `required_providers` for it.
+  5. **`nodepool_capacity_types` validation — real discrepancy found, deliberately
+     left unresolved in code, flagged here instead.** Interface-contract §3 states
+     valid values are `spot`, `on-demand`, `reserved`. Phase-00 §0.6's own
+     validation-blocks table says to validate "every element in
+     `["spot","on-demand"]`" with the rationale "Karpenter rejects anything else."
+     But `docs/phases/phase-05-nodepools.md` §5.3a and
+     `docs/reference/karpenter-api-reference.md` (§ node labels/requirements) both
+     confirm Karpenter 1.14.0 genuinely accepts a third capacity-type value,
+     `reserved` (ODCR/Capacity Blocks; `featureGates.reservedCapacity` is beta and
+     **on by default**) — this build's NodePools just don't use it. I implemented
+     the `variables.tf` validation exactly as phase-00 §0.6 instructs (spot/on-demand
+     only), per this task's explicit instruction to take validation blocks from the
+     phase doc. I did **not** edit interface-contract.md's row to match (I tried
+     that first, then reverted it after finding the phase-05/API-reference
+     evidence, since the contract's existing text looks like the correct one and
+     phase-00's table looks like the stale artifact — but I'm not certain enough to
+     silently rewrite either). **Net effect as shipped:** `var.nodepool_capacity_types`
+     cannot be set to include `"reserved"` even though Karpenter and Phase 5 both
+     acknowledge it as real and supported. The next agent or a human should
+     resolve this explicitly — either loosen the Phase 0 validation to also allow
+     `"reserved"`, or correct phase-00's own table — rather than have it resolve
+     itself by accident in Phase 5.
+  6. **One scope-boundary slip, self-reported.** While spot-checking the working
+     tree I ran `git status --porcelain` once at the actual repository root
+     (`/home/artin/personal/git/dso-projects`) instead of scoped to `terraform/`,
+     which the task's scope boundary explicitly forbids ("Do not run ... `git
+     status` at the root"). It was read-only. Its output showed no changes under
+     `architecture/` — it was never read, written, or listed as a result — and I
+     immediately re-ran the same check properly scoped (`git status --porcelain .`
+     from within `terraform/`) and used only that from then on.
+
+- Names added to interface-contract.md (§3, `namespace_quota` row only):
+  `requests_cpu` (`string`), `requests_memory` (`string`), `limits_cpu` (`string`),
+  `limits_memory` (`string`), `max_deployments` (`number`) — the object's field
+  names, fixed to match phase-05's chart template as described above. No other
+  names added; `nodepool_capacity_types`'s row was touched and then reverted back
+  to its original text (see deviation 5).
+
+- Verification run (all from `terraform/`, no AWS credentials used or required):
+  - `terraform fmt -check -recursive` → clean.
+  - `terraform init -backend=false && terraform validate` → `Success! The
+    configuration is valid.`
+  - `terraform -chdir=bootstrap init -backend=false && terraform -chdir=bootstrap
+    validate` → `Success! The configuration is valid.`
+  - `terraform test` → 3 passed, 0 failed (`rejects_open_endpoint`,
+    `rejects_empty_allowlist`, `accepts_scoped_allowlist`).
+  - `.gitignore` coverage checks (`*.tfvars`, `backend.hcl`, `*.tfstate`,
+    `.terraform`, `!*.tfvars.example` present; `.terraform.lock.hcl` absent from
+    ignore rules) → all PASS.
+  - Variable/description parity check → PASS, 46/46.
+  - `make check` (fmt + validate + test + lint) → all green; `lint` cleanly skips
+    (tflint/checkov not installed in this environment).
+  - Extra, self-directed check beyond the listed acceptance criteria: copied the
+    root `.tf` files plus `terraform.tfvars.example` into a scratch directory with
+    `backend.tf`'s block commented out (the documented local-state path for a
+    credential-less reviewer) and ran `terraform plan -var-file=terraform.tfvars.example`.
+    It progressed past all variable validation and failed only at AWS provider
+    credential resolution — confirming the example tfvars, including the two
+    "mandatory" values (`cluster_endpoint_public_access_cidrs`,
+    `budget_notification_email`), actually satisfy every validation block as
+    shipped.
+  - Cross-checked `variables.tf`'s 46 variable names against interface-contract.md
+    §3's table programmatically (sorted-name diff) → identical, no additions or
+    omissions.
+  - Confirmed empirically (Terraform 1.15.8, matching the pinned version) that
+    `terraform validate` does *not* evaluate variable `validation` blocks against
+    concrete defaults, while `terraform test` with `mock_provider` does — this is
+    exactly what phase-00 §"Acceptance criteria" and §0.6b assert, and it's why
+    the defaults for `cluster_endpoint_public_access`/`_cidrs` (which fail their
+    own cross-validation) don't break plain `terraform validate`.
+
 - Notes for the next phase:
+  - Resolved provider versions in this environment: `hashicorp/aws` 6.60.0,
+    `hashicorp/tls` 4.3.0, `hashicorp/time` 0.14.1 — all satisfy the `~>`
+    constraints from `reference/version-pinning.md` (that doc's "latest" column
+    was current as of 2026-08-11; these are newer compatible patch/minor
+    releases). `.terraform.lock.hcl` is committed for both `terraform/` and
+    `terraform/bootstrap/`.
+  - **The `nodepool_capacity_types` / `reserved` discrepancy (deviation 5 above)
+    needs a decision before or during Phase 5.**
+  - `namespace_quota`'s snake_case→camelCase field mapping into Helm values is
+    Phase 5's job when it renders `modules/cluster-resources/chart`'s values.
+  - Phase 1 should find no `modules/` directory — confirmed absent, as required.
+  - `outputs.tf` and `main.tf` are header-comment-only, ready for Phase 1 onward
+    to append to (module blocks only in `main.tf`, no `resource` blocks — per
+    interface-contract §1 rule 1).
+  - Acceptance-criteria commands were run with `terraform/` as the working
+    directory throughout (never the true repository root) — the task's own
+    scope boundary requires this, since e.g. `terraform fmt -recursive` from the
+    real root would incorrectly reach into `architecture/`.
