@@ -1,0 +1,57 @@
+# Proof: run this and read the output to confirm which architecture your
+# pod actually landed on.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: arch-check
+  namespace: demo
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels: { app: arch-check }
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: arm64 # flip to amd64 to prove the other side
+      containers:
+        - name: arch
+          # :latest is a deliberate, pragmatic exception to S-62 (no :latest
+          # on workload images) — this is a disposable diagnostic Job, not a
+          # deployed workload.
+          image: public.ecr.aws/docker/library/busybox:latest
+          command: ["sh", "-c"]
+          args:
+            - |
+              echo "pod:          $(hostname)"
+              echo "architecture: $(uname -m)"      # aarch64 on Graviton, x86_64 on Intel/AMD
+              echo "node:         ${NODE_NAME}"
+          env:
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+          # Resource REQUESTS are what Karpenter does its maths on.
+          # memory is set above the demo namespace's LimitRange floor
+          # (64Mi) with a little headroom — a request pinned exactly at the
+          # floor is one rounding difference from being rejected.
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+            limits:
+              memory: 128Mi
+          # busybox runs as uid 0 by default — the `restricted` Pod Security
+          # profile on the `demo` namespace rejects that without an explicit
+          # runAsUser. 65534 (nobody) can still run `uname -m`.
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 65534
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault } # required by PSA `restricted`
+# NOTE on what this Job deliberately does NOT print: an earlier draft also
+# read the node's instance type via a downward-API fieldRef on
+# metadata.labels['node.kubernetes.io/instance-type']. That field exposes
+# the POD's own labels, not the node's — the pod carries no such label, so
+# the value renders empty. There is no fieldRef path from a pod to its
+# node's labels. To see the instance type, run:
+#   kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type

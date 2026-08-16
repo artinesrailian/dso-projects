@@ -1,0 +1,75 @@
+# The recommended pattern: build a multi-arch image and set no architecture
+# constraint at all. This is what most workloads at the company should do.
+#
+# Build it with:
+#   docker buildx build --platform linux/amd64,linux/arm64 -t <repo>:<tag> --push .
+#
+# With no nodeSelector, this pod is eligible for both the arm64 and amd64
+# NodePools. Karpenter evaluates the higher-weighted pool first, and this
+# build weights arm64 higher (the price/performance default) — so an
+# unconstrained pod lands on Graviton and the scheduler picks the cheapest
+# option automatically.
+#
+# ⚠️ The trade-off that comes with this: if your image is x86-only and you
+# set no nodeSelector, it will still be scheduled onto a Graviton node and
+# crash-loop with `exec format error`. This file only works because
+# nginx-unprivileged is genuinely multi-arch. See examples/README.md for the
+# fix if your own image is not.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-multiarch
+  namespace: demo
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web-multiarch }
+  template:
+    metadata:
+      labels: { app: web-multiarch }
+    spec:
+      # No nodeSelector, no affinity — NodePool weight alone decides.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-multiarch }
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-multiarch }
+
+      containers:
+        - name: web
+          image: public.ecr.aws/nginx/nginx-unprivileged:stable
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 101
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: tmp, emptyDir: {} }
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-multiarch
+  namespace: demo
+spec:
+  minAvailable: 1 # of 2 replicas
+  selector:
+    matchLabels: { app: web-multiarch }
