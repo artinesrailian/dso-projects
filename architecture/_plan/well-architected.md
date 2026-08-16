@@ -158,7 +158,7 @@ A chapter with one subsection per pillar. Each subsection must contain:
 3. **One honest gap or deferral** — something the design does not yet do for that pillar, and the
    trigger for doing it. A pillar section with no gap reads as marketing.
 
-Plus §10.7, the trade-off table from §3 above.
+Plus §9.7, the trade-off table from §3 above.
 
 **Do not** reproduce the Well-Architected Framework's own documentation, quote its design principles
 verbatim, or list the review questions. The chapter's value is the mapping to *this* design, and

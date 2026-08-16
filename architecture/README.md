@@ -28,6 +28,8 @@ company's REST API, single-page application (SPA), and PostgreSQL database, cove
 structure, network, compute, and data, from a first few hundred daily users through a growth path to
 millions.
 
+> **Well-Architected pillars.** Security · Reliability · Cost Optimization
+
 We recommend Amazon Web Services (AWS), organized as seven accounts under one AWS Organization managed
 by AWS Control Tower, built as a three-tier architecture. The React SPA ships as static files from
 Amazon CloudFront, never a container. The Python/Flask REST API runs as pods on Amazon EKS, where
@@ -100,8 +102,8 @@ flowchart LR
   classDef ops fill:#EDE7F6,stroke:#4527A0,stroke-width:1px,color:#111
   classDef external fill:#ECEFF1,stroke:#455A64,stroke-width:1px,color:#111
   class user,dns external
-  class cf,spa,alb edge
-  class api,worker,argocd compute
+  class cf,spa edge
+  class alb,api,worker,argocd compute
   class proxy,db,dr data
   class ci,ecr,gitops ops
 ```
@@ -110,8 +112,8 @@ flowchart LR
 
 | Element | Meaning |
 |---|---|
-| Orange (`edge`) | Presentation tier — CloudFront, AWS Web Application Firewall (WAF), the S3 origin, the load balancer |
-| Blue (`compute`) | Application tier — Argo CD and the Flask API / worker pods on EKS |
+| Orange (`edge`) | Presentation tier — CloudFront, AWS Web Application Firewall (WAF), the S3 origin |
+| Blue (`compute`) | Application tier — the load balancer, Argo CD, and the Flask API / worker pods on EKS |
 | Green (`data`) | Data tier — RDS Proxy, Aurora PostgreSQL, and the disaster recovery (DR) region |
 | Purple (`ops`) | Delivery pipeline — continuous integration (CI), ECR, and the GitOps repository |
 | Grey (`external`) | Outside the system — end users and DNS resolution |
@@ -128,7 +130,7 @@ Six decisions carry the largest, hardest-to-reverse consequences:
 
 | Decision | Why | What it costs | ADR |
 |---|---|---|---|
-| Seven AWS accounts, not one | The only AWS boundary that separates identity, quotas, and the audit trail all at once | ~$25–60/month baseline per account | ADR-004 |
+| Seven AWS accounts, not one | The only AWS boundary that separates identity, quotas, and the audit trail all at once | ~$25–60/month baseline per account (indicative) | ADR-004 |
 | A three-tier structure, not microservices | Matches one API and one team's actual shape; each tier scales on its own, without a service mesh | The application tier stays one deployable unit | — (§10) |
 | Managed Kubernetes — Amazon EKS, Karpenter, Graviton, Spot | Removes control-plane operations; Karpenter right-sizes nodes automatically onto Spot capacity, 70–90% cheaper than On-Demand | Worker nodes and add-ons stay the team's job | ADR-011 |
 | Aurora over RDS or self-managed PostgreSQL | Sub-30-second failover and 15-replica read scaling without a later migration | Higher per-unit price than RDS | ADR-019 |
@@ -157,15 +159,15 @@ This chapter sets the terms the rest of the document is checked against.
 
 ### 0.1 Scope and objectives
 
-This document designs Innovate Inc.'s cloud infrastructure for a Python/Flask REST API, a React
-single-page application (SPA), and PostgreSQL. Four criteria drive it: growth from a few hundred daily
-users to potentially millions, sensitive user data, a small team with limited cloud experience, and
-continuous integration and continuous delivery (CI/CD) from day one.
+This document designs Innovate Inc.'s cloud infrastructure for a Python/Flask REST API, a React SPA,
+and PostgreSQL. Four criteria drive it: growth from a few hundred daily users to potentially millions,
+sensitive user data, a small team with limited cloud experience, and continuous integration and
+continuous delivery from day one.
 
-We recommend Amazon Web Services (AWS) over Google Cloud Platform (GCP) — GCP demands less
-day-to-day Kubernetes operation, but AWS wins on managed-service breadth, governance tooling, and
-hiring pool (Appendix B, ADR-001). Managed services come first throughout: a small team's time is
-scarcer than the bill, so a managed AWS service beats self-hosting wherever one exists.
+We recommend AWS over Google Cloud Platform (GCP) — GCP demands less day-to-day Kubernetes operation,
+but AWS wins on managed-service breadth, governance tooling, and hiring pool (Appendix B, ADR-001).
+Managed services come first throughout: a small team's time is scarcer than the bill, so a managed AWS
+service beats self-hosting wherever one exists.
 
 ### 0.2 Architecture overview — a three-tier design
 
@@ -206,7 +208,7 @@ Conflicting principles are resolved with the trade-off stated explicitly, collec
 These assumptions protect the design from being judged against requirements the brief never stated.
 
 1. US-based users and data residency at launch (`us-east-1`); `eu-west-1` reserved. A single
-   production region suffices; cross-region is disaster recovery (DR) posture, not active-active.
+   production region suffices; cross-region is DR posture, not active-active.
 2. Greenfield, no existing AWS footprint; GitHub source control (other SCMs change CI/CD detail, not
    the architecture).
 3. Small, lean team, no dedicated SRE or security staff; budget roughly four figures monthly at
@@ -247,10 +249,13 @@ level, so guardrails differ by risk; quotas are counted per account, so a runawa
 `innovate-dev` cannot exhaust production's headroom. The same separation buys **separation of
 duties**: a full compromise of `innovate-prod` still cannot reach the log sink or disable the
 findings pipeline — what a SOC 2 audit asks for. Each account pays its own ~$25–60/month baseline
-(GuardDuty, Config, VPC endpoints) — why the answer is seven accounts, not twenty (Appendix B,
+(indicative — GuardDuty, Config, VPC endpoints) — why the answer is seven accounts, not twenty (Appendix B,
 ADR-004).
 
 ### 1.2 Account inventory
+
+Seven accounts exist on day one, each with one stated purpose; two more are pre-planned but not
+created yet.
 
 | Account | OU | Purpose | Day 1? |
 |---|---|---|---|
@@ -515,7 +520,7 @@ exist at all — eleven layers, edge to database security group, since no single
 | Layer | Control | What it stops |
 |---|---|---|
 | Edge / DDoS | Shield Standard (Advanced deferred) | Volumetric L3/L4 DDoS |
-| Edge / application | AWS Web Application Firewall (WAF) managed rule groups + rate limit (2 000 req/5 min/IP) | SQLi, XSS, scanners, credential stuffing |
+| Edge / application | AWS WAF managed rule groups + rate limit (2 000 req/5 min/IP) | SQLi, XSS, scanners, credential stuffing |
 | Edge / TLS | ACM cert, TLS 1.2+, HSTS, response-headers policy | Downgrade, mixed content |
 | Origin protection | CloudFront OAC; ALB accepts only the CloudFront prefix list + a shared secret header | Bypassing WAF by hitting the ALB directly |
 | Subnet | Network ACLs (NACLs), stateless backstop | Route-table/SG misconfiguration |
@@ -597,7 +602,7 @@ Graviton runs ~20% better price/performance than `amd64`; Spot costs 70–90% le
 on two minutes' notice. Karpenter subscribes to an Amazon Simple Queue Service (SQS) interruption
 queue fed by EventBridge; on
 notice it cordons, drains, and replaces the node, while `PodDisruptionBudget`s keep replicas serving —
-stateless on Spot, the platform tier and anything stateful on On-Demand.
+stateless on Spot, the platform node group and anything stateful on On-Demand.
 
 > **Trade-off.** Every deployment must handle `SIGTERM` gracefully, treat requests as retryable, and
 > hold no session state in memory.
@@ -785,8 +790,9 @@ capable of carrying the same schema to millions of users without a migration (Ap
 
 ### 4.2 Configuration and connection management
 
-Production runs Serverless v2 at `0.5–16 ACU`, writer plus reader in a different AZ; dev runs
-`0.5–2 ACU`, writer only, auto-paused; staging mirrors production at reduced capacity, all on
+The production cluster, `innovate-prod-aurora-pg-use1`, runs Serverless v2 at `0.5–16 ACU`, writer
+plus reader in a different AZ; `innovate-dev-aurora-pg-use1` runs `0.5–2 ACU`, writer only,
+auto-paused; `innovate-stg-aurora-pg-use1` mirrors production at reduced capacity, all on
 PostgreSQL 16.x (path to 17.x via Blue/Green) in Private — Data subnets, `publicly_accessible = false`.
 
 PostgreSQL allocates a process per connection, not a thread — thirty pods at four gunicorn workers
@@ -794,8 +800,9 @@ each exhausts connections before CPU. **Amazon RDS Proxy** multiplexes that onto
 pods never connect to Aurora directly, and holds connections open through failover so a 30-second
 outage degrades to slow, not down (with retry-with-backoff and a database-aware readiness probe). No
 password lives in the pod: the credential rotates automatically in Secrets Manager, and the app
-authenticates via **IAM database authentication**; migrations run under a separate role that cannot
-run DDL.
+authenticates via **IAM database authentication**; the app's own role cannot run data-definition-language
+(DDL) statements, and schema migrations run under a separate, narrower role that can, invoked only
+inside the Argo CD PreSync hook (§3.9).
 
 ### 4.3 Database security
 
@@ -888,7 +895,7 @@ cost for a team with no platform engineer — trigger: service count past a hand
 
 Three identity planes: humans through IAM Identity Center (§1.4), workloads through EKS Pod Identity,
 one role per service account (§3.6), CI/CD through GitHub OIDC scoped to one repo/branch (§3.9) — so
-**there is no long-lived credential anywhere in this system** to steal.
+**no human, workload, or CI/CD identity in this system holds a long-lived credential** to steal.
 
 Least privilege is mechanized: every permission set starts from an AWS managed policy, narrowed via
 IAM Access Analyzer's unused-access findings. Production access is read-only by default; an elevated
@@ -976,9 +983,12 @@ down.
 
 ### 6.2 The four signals
 
+Metrics, logs, traces, and synthetics each answer a different question about the running system, and
+each is collected by a different tool.
+
 | Signal | Tooling | The question it answers |
 |---|---|---|
-| Metrics | Amazon Managed Prometheus + Grafana; CloudWatch Container Insights | Is it healthy, and getting worse |
+| Metrics | Amazon Managed Service for Prometheus and Amazon Managed Grafana; CloudWatch Container Insights | Is it healthy, and getting worse |
 | Logs | Fluent Bit → CloudWatch (14 days hot) → S3 in Log Archive, Athena (400 days) | What exactly happened to this request |
 | Traces | OpenTelemetry in Flask → ADOT Collector → AWS X-Ray | Which hop is slow |
 | Synthetics | CloudWatch Synthetics against the app and `/api/healthz` from two regions | Is it broken for a user right now |
@@ -1057,7 +1067,7 @@ A good consultant gives a client a choice, not only a bill. Five changes reach *
 
 | Change | Gives up |
 |---|---|
-| Dev and staging share one EKS cluster | Staging stops being an isolated rehearsal |
+| Dev and staging merge into one AWS account, `innovate-dev-staging`, sharing one EKS cluster | Staging stops being an isolated rehearsal — an EKS cluster cannot span two accounts, so sharing a cluster means sharing the account, isolated only by Kubernetes namespace instead |
 | One non-production NAT Gateway, not two | An AZ-local failure stops outbound for the whole environment |
 | No reader replica in non-production | Read-replica failover unrehearsed before production |
 | In-cluster monitoring permanently | Observability never migrates off the cluster it monitors |
@@ -1065,10 +1075,13 @@ A good consultant gives a client a choice, not only a bill. Five changes reach *
 
 Cheaper because it removes rehearsal fidelity, not waste. Take these trades in order: log retention,
 non-production reader, and in-cluster Prometheus are close to free; the shared NAT Gateway is a
-reasonable second step. **Last**: the shared dev/staging cluster — the one change that stops staging
-resembling production, the whole point of having it.
+reasonable second step. **Last**: merging dev and staging into one account and cluster — the one
+change that stops staging resembling production, the whole point of having it.
 
 ### 7.3 How cost scales with growth
+
+The bill does not grow linearly with users; fixed costs dominate early, then the curve flattens as
+scale absorbs them.
 
 | Stage | Daily active users | Indicative monthly spend |
 |---|---|---|
@@ -1084,6 +1097,8 @@ to roughly linear, and commitment discounts bend it back down — cost per user 
 from day one.
 
 ### 7.4 Optimization levers
+
+Twelve concrete levers hold this bill down, each with a real trade-off rather than a free win.
 
 | Lever | Trade-off |
 |---|---|
@@ -1130,6 +1145,9 @@ The decisions expensive to change later were made for stage 4 on day one: the ac
 
 ### 8.1 Stages and triggers
 
+Four stages carry the design from launch to millions of users; each row names what changes and the
+observable signal that starts it.
+
 | Stage | Scale | What changes | Trigger |
 |---|---|---|---|
 | **1 — Launch** | a few hundred DAU | The design as written | Day-1 baseline |
@@ -1171,7 +1189,7 @@ Can the team run and improve this system without heroics?
 | Small, reversible deployments — a canary, one-commit rollback | §3.9 |
 | A shared SLO and automatic error-budget freeze end mid-incident severity debates | §6.3 |
 
-Gap: no dedicated on-call rotation yet — trigger: a staffed rotation (§6.2).
+Gap: no dedicated on-call rotation yet — trigger: a staffed rotation (§6.4).
 
 ### 9.2 Security
 
@@ -1179,7 +1197,7 @@ Are data, systems, and people protected at every layer, not only the perimeter?
 
 | What this design does | Where |
 |---|---|
-| No long-lived credential anywhere, human or machine | §1.4; §5.2 |
+| No long-lived identity credential anywhere, human or machine | §1.4; §5.2 |
 | A tamper-evident audit trail in a separate account no workload can write to | §5.4 |
 | Defense in depth, edge to database — eleven named layers | §2.4 |
 
@@ -1230,12 +1248,13 @@ Is this workload's environmental impact minimized, not someone else's problem?
 
 | What this design does | Where |
 |---|---|
-| Graviton-first compute — the same ~20% performance-per-watt advantage Cost Optimization captures | §3.3 |
+| Graviton-first compute — the same materially-better performance-per-watt advantage Cost Optimization captures | §3.3 |
 | Karpenter consolidation and bin-packing — fewer, busier nodes instead of many idle ones | §3.3 |
-| Scale-to-zero where load allows — KEDA, Aurora auto-pause, dev shuts down off-hours | §3.4; §7.4 |
+| Scale-to-zero where load allows — KEDA, Aurora auto-pause, dev shuts down off-hours | §3.4; §4.2; §7.4 |
 
 These are the same decisions serving Cost Optimization above — more credible than a separate program.
-Gap: no carbon-footprint measurement; `us-east-1` was chosen for the user base, not carbon intensity.
+Gap: no carbon-footprint measurement; `us-east-1` was chosen for the user base, not carbon intensity —
+trigger: a customer or compliance request for carbon-reporting data.
 
 ### 9.7 Accepted trade-offs between pillars
 
@@ -1256,6 +1275,8 @@ few hundred users to millions, not an open-ended someday.
 | Pilot-light DR instead of active-active | Cost Optimization, Operational Excellence | Reliability | A 60-minute RTO is acceptable at this stage; the trigger to change it is named above |
 | Deferring a service mesh | Operational Excellence, Cost Optimization | Security | `NetworkPolicy` and TLS cover the current service count; mesh mTLS arrives when the count justifies the operational load |
 | Deferring Compute Savings Plans to a stable baseline | Operational Excellence, reduced commitment risk | A larger, sooner Cost Optimization discount | A wasted 12-month commitment against a moving architecture costs more than the ~30% discount it would have captured |
+
+---
 
 ## 10. Summary of Key Decisions
 
@@ -1369,12 +1390,12 @@ row in §10; their full ADR form is preserved in this repository's planning reco
 
 | ADR | Title | Section | Pillars |
 |---|---|---|---|
-| ADR-001 | AWS as the Cloud Provider | §0 Scope, Assumptions and Design Principles | Operational Excellence · Security · Cost Optimization |
+| ADR-001 | AWS as the Cloud Provider | §0.1 Scope and objectives | Operational Excellence · Security · Cost Optimization |
 | ADR-004 | Seven AWS Accounts Rather Than a Single Account | §1.1 Why multiple accounts | Security · Reliability |
 | ADR-007 | One VPC Per Environment, No Interconnection | §2.3 Routing, egress and private connectivity | Security · Reliability |
 | ADR-011 | Amazon EKS as the Compute Platform | §3.1 Why Amazon EKS | Operational Excellence · Reliability · Performance Efficiency |
 | ADR-017 | GitOps Pull-Based Delivery with Argo CD Over Push-Based CI/CD | §3.9 Deployment — CI/CD and GitOps | Security · Reliability · Operational Excellence |
-| ADR-019 | Aurora PostgreSQL Over Self-Managed and RDS | §4.1 Recommendation and alternatives considered | Reliability · Performance Efficiency · Cost Optimization |
+| ADR-019 | Amazon Aurora PostgreSQL Over Self-Managed and RDS | §4.1 Recommendation and alternatives considered | Reliability · Performance Efficiency · Cost Optimization |
 | ADR-023 | Customer-Managed KMS Keys Rather Than AWS-Managed Keys | §5.3 Data protection | Security · Operational Excellence |
 | ADR-026 | Open-Source Observability, Managed at Scale | §6.2 The four signals | Operational Excellence · Reliability · Cost Optimization |
 | ADR-029 | Offering the Lean-Start Variant as a Documented Option | §7.2 The lean-start variant | Cost Optimization · Reliability |
@@ -1386,7 +1407,7 @@ row in §10; their full ADR form is preserved in this repository's planning reco
 | **Status** | Accepted |
 | **Requirement** | R21, R25, R27 |
 | **Pillars** | Operational Excellence · Security · Cost Optimization |
-| **Section** | §0 Scope, Assumptions and Design Principles |
+| **Section** | §0.1 Scope and objectives |
 
 **Context.** Innovate Inc. must choose between AWS and GCP before any other decision can proceed.
 The company has a small engineering team, no existing cloud footprint, handles sensitive data, and
@@ -1439,8 +1460,8 @@ hundreds of users toward millions — the account structure chosen now is costly
 | Option | Strengths | Weaknesses | Verdict |
 |---|---|---|---|
 | One account, separated by VPC per environment | Cheapest and fastest to stand up; a single console and a single bill | A policy meant only for development is not technically stopped from touching production resources, because IAM and quotas are organization-wide inside one account | Rejected — the isolation R2 asks for is optional here, not enforced |
-| One account, separated by Kubernetes namespace | Fastest of all to provision; no account management overhead | A namespace boundary is enforced by convention and RBAC discipline, not by the platform — the same node fleet and cluster IAM role sit underneath every namespace | Rejected — collapses exactly the boundary the client's sensitive data needs |
-| Three accounts, one per environment (dev, staging, prod) | Environment isolation is genuinely enforced where the client feels it most | No separated audit sink and no delegated security-findings account — logs and findings live inside the same accounts they need to prove were not tampered with | Rejected — solves environment isolation, leaves the audit trail unprotected |
+| One account, separated by Kubernetes namespace | Fastest of all to provision; no account management overhead | A namespace boundary is enforced by convention and RBAC discipline, not by the platform — the same node fleet and cluster IAM role sit underneath every namespace | Rejected — collapses exactly the boundary Innovate Inc.'s sensitive data needs |
+| Three accounts, one per environment (dev, staging, prod) | Environment isolation is genuinely enforced where Innovate Inc. feels it most | No separated audit sink and no delegated security-findings account — logs and findings live inside the same accounts they need to prove were not tampered with | Rejected — solves environment isolation, leaves the audit trail unprotected |
 | Seven accounts: three workload plus log archive, security tooling, shared services, and management | Every axis of R2 gets its own boundary — workload isolation, an audit sink no workload can write to, one delegated security view, one place images are built once | Four more accounts than the minimum, each with its own baseline services and cost | **Chosen** |
 
 **Decision.** We hold Innovate Inc.'s seven day-one accounts — three workload plus
@@ -1449,7 +1470,7 @@ hundreds of users toward millions — the account structure chosen now is costly
 
 **Why this is the right choice for Innovate Inc.** Think of an AWS account as a locked room: what
 is inside cannot be reached from another without a door opened on purpose. Three accounts lock
-development, test, and production, but the camera footage and alarm system sit in those same rooms
+development, staging, and production, but the camera footage and alarm system sit in those same rooms
 too. Seven accounts give the footage, the alarm, and the build pipeline rooms of their own, so a
 mistake elsewhere cannot erase the evidence or silence the alarm. Going further than seven adds
 doors without real separation.
@@ -1460,9 +1481,9 @@ doors without real separation.
 - *Accepts:* Seven Terraform state files and baseline services to run instead of one, plus
   centralized access through IAM Identity Center from day one.
 
-**Cost impact.** Each account adds roughly $25–60/month in baseline services. An eighth account
-today adds the same cost without a boundary any current workload needs — why the count stops at
-seven.
+**Cost impact.** Each account adds roughly $25–60/month (indicative) in baseline services. An eighth
+account today adds the same cost without a boundary any current workload needs — why the count stops
+at seven.
 
 **Revisit when.** The product decomposes into services owned by separate teams, at which point
 per-service accounts become the next boundary.
@@ -1477,9 +1498,8 @@ per-service accounts become the next boundary.
 | **Section** | §2.3 Routing, egress and private connectivity |
 
 **Context.** Innovate Inc. runs three workload environments — development, staging, production —
-plus shared services, each already isolated by its own AWS account (§1 Cloud Environment Structure).
-The network layer can restate that isolation, or quietly undo it by connecting the VPCs back
-together for convenience.
+plus shared services, each already isolated by its own AWS account (§1). The network layer can
+restate that isolation, or quietly undo it by connecting the VPCs back together.
 
 **Options considered.**
 
@@ -1495,23 +1515,22 @@ with no peering connection, Transit Gateway attachment, or shared route to any o
 
 **Why this is the right choice for Innovate Inc.** Think of each environment as its own building
 with its own front door, not four floors connected by an internal staircase. If a mistake happens on
-the development floor — a bug, a misconfigured setting, even a break-in — there is no staircase to
-the production floor where real customer data lives. Information only moves between environments
-through the same authenticated, logged door an outside visitor would use. It costs a little
-convenience, but that inconvenience is the point.
+the development floor — a bug, a misconfigured setting — there is no staircase to the production
+floor where real customer data lives. Information moves between environments only through the same
+authenticated, logged door an outside visitor would use. That inconvenience is the point.
 
 **Consequences.**
 - *Gains:* A compromised or misconfigured environment has no network path to another; the account
-  isolation from §1 Cloud Environment Structure holds at the network layer too.
+  isolation from §1 holds at the network layer too.
 - *Accepts:* Cross-environment needs go through an authenticated API or an export/import step, never
   a direct route — slower than peering would be.
 
 **Cost impact.** No direct cost; the alternative would have saved nothing meaningful and cost the
 isolation guarantee.
 
-**Revisit when.** A specific, named integration need appears that a public API genuinely cannot
-serve — the connection then becomes a dedicated, reviewed exception, most likely a future Transit
-Gateway in `innovate-network`.
+**Revisit when.** A specific, named integration need appears that a public API cannot serve — the
+connection becomes a dedicated, reviewed exception, most likely a future Transit Gateway in
+`innovate-network`.
 
 ### ADR-011 — Amazon EKS as the Compute Platform
 
@@ -1538,14 +1557,14 @@ millions of users, with a small engineering team and no platform team.
 ECS on Fargate, EKS Auto Mode, or unmanaged EC2.
 
 **Why this is the right choice for Innovate Inc.** A fully automated platform, Amazon ECS on AWS
-Fargate, is less work to run today — worth saying plainly rather than pretending Kubernetes, the
-system that runs and restarts an application's containers, is the only sensible choice for five
-people. The reason to accept the extra work is what happens after launch succeeds: most cloud
-engineers already know Kubernetes, and it does not lock deployment tooling to one provider the way
-Fargate does. EKS, Amazon's managed version of Kubernetes, hands back the hardest part — keeping the
-control plane that runs it patched — while leaving Innovate Inc. free to decide how nodes and scaling
-work. A more automated Auto Mode option would make those decisions for the team instead, hiding the
-reasoning this document exists to show.
+Fargate, is less work to run today — worth saying plainly rather than pretending Kubernetes is the
+only sensible choice for five people. The reason to accept the extra work is what happens after
+launch succeeds: most cloud engineers already know Kubernetes, and it does not lock deployment
+tooling to one provider the way Fargate does. EKS, Amazon's managed version of Kubernetes, hands back
+the hardest part — keeping the control plane patched — while leaving Innovate Inc. free to decide how
+nodes and scaling work. A more automated EKS setting called Auto Mode, where AWS itself chooses the
+nodes, would make those decisions for the team instead, hiding the reasoning this document exists to
+show.
 
 **Consequences.**
 - *Gains:* A managed, multi-AZ control plane with automatic patching; the wider Kubernetes ecosystem
@@ -1599,7 +1618,7 @@ bad image, not deploy anything, because deployment happens entirely inside the c
 **Revisit when.** The team needs deployment orchestration Argo CD cannot express, such as
 coordinated multi-cluster releases beyond environment-by-environment promotion.
 
-### ADR-019 — Aurora PostgreSQL Over Self-Managed and RDS
+### ADR-019 — Amazon Aurora PostgreSQL Over Self-Managed and RDS
 
 | | |
 |---|---|
@@ -1629,8 +1648,9 @@ Proxy.
 a mistake is permanent — a broken application redeploys in minutes, but lost customer data does not
 come back. Aurora keeps six copies of the data across three buildings and takes over from a failed
 server in under thirty seconds, unattended. It bills for capacity used, so it costs little today and
-grows to millions without a migration. RDS works today but recovers in one to two minutes, not thirty
-seconds, and cannot spread reads across many copies — exactly what growth needs.
+grows to millions without a migration. Amazon RDS, AWS's simpler managed database service, works
+today but recovers in one to two minutes, not thirty seconds, and cannot spread reads across many
+copies — exactly what growth needs.
 
 **Consequences.**
 - *Gains:* Sub-30-second failover; read scaling to fifteen replicas without re-architecture; a
@@ -1692,7 +1712,7 @@ cannot provide.
 | | |
 |---|---|
 | **Status** | Accepted |
-| **Requirement** | R19, R7 |
+| **Requirement** | R19, R22 |
 | **Pillars** | Operational Excellence · Reliability · Cost Optimization |
 | **Section** | §6.2 The four signals |
 
@@ -1716,15 +1736,15 @@ an on-call rotation exists.
 **Why this is the right choice for Innovate Inc.** Watching a system for problems costs money, and how
 much depends on catching one fast. Today, with a few hundred users, the cheapest option — running the
 monitoring software on the same computers it watches — is reasonable and saves money for elsewhere.
-Its catch: a whole-cluster problem can take the monitor down with it, exactly when it matters most. The
-fix is switching once an on-call engineer depends on it, not paying up front for resilience not yet
-needed. A ready-made commercial platform routes customer-adjacent data through a third company and
-grows expensive with scale.
+Its catch: a whole-cluster problem can take the monitor down with it, exactly when it matters most.
+The fix is switching once an on-call engineer depends on it, not paying for unneeded resilience.
+A ready-made commercial platform routes customer-adjacent data through a third company and grows
+expensive with scale.
 
 **Consequences.**
 - *Gains:* A cheap start; a defined trigger to a resilient stack; no vendor holding customer data.
-- *Accepts:* Running blind through one real cluster-wide incident before the trigger fires; the
-  cutover carries no dashboards or history with it.
+- *Accepts:* Running blind through one cluster-wide incident before the trigger fires; the cutover
+  carries no dashboards or history with it.
 
 **Cost impact.** In-cluster monitoring costs less at launch; the managed services cost more but avoid
 a single point of failure.
@@ -1741,9 +1761,8 @@ watches, or an on-call rotation is staffed.
 | **Pillars** | Cost Optimization · Reliability |
 | **Section** | §7.2 The lean-start variant |
 
-**Context.** Innovate Inc. is cost-sensitive at launch but asked for a design ready for rapid growth;
-ignoring budget looks tone-deaf, and the cheapest setup risks under-building the foundation growth
-needs.
+**Context.** Innovate Inc. is cost-sensitive but asked for a design ready for rapid growth; ignoring
+budget looks tone-deaf, and the cheapest setup risks under-building what growth needs.
 
 **Options considered.**
 
@@ -1758,19 +1777,21 @@ variant at ≈$400–450/month documented as a costed alternative.
 
 **Why this is the right choice for Innovate Inc.** Innovate Inc. pays the bill, so it deserves both
 numbers, not only the one recommended here. The fuller design costs roughly twice as much because it
-keeps the test environment a faithful copy of production and stops a failure in one environment
-reaching another — protections that matter most during an incident. While runway is short, the
-lean-start variant is a real option, trade-offs stated plainly. The cheapest cuts are nearly free to
-reverse; the costliest is merging the test and rehearsal environments, trading away trust in a passing
-staging deployment.
+keeps staging a faithful copy of production, in its own AWS account with its own Kubernetes cluster,
+so a mistake there cannot reach anything else — a protection that matters
+most during an incident. While runway is short, lean-start is a real option, trade-offs stated
+plainly. The cheapest cuts are nearly free to reverse; the costliest is merging dev and staging into
+one shared account and cluster, trading the account-level wall between them for Kubernetes namespaces
+alone.
 
 **Consequences.**
 - *Gains:* A documented, costed choice instead of one prescriptive number.
-- *Accepts:* Two configurations to keep consistent, and a shared non-production cluster that removes
-  the operational isolation two separate clusters provided.
+- *Accepts:* Two configurations to keep consistent, and, in the lean-start variant, a merged
+  `innovate-dev-staging` account and cluster that leaves dev and staging separated only by namespace,
+  not by account.
 
 **Cost impact.** The fuller design costs roughly double the lean-start variant; both are indicative —
 see the AWS Pricing Calculator.
 
-**Revisit when.** The business no longer needs to economize this hard, or an enterprise customer
-contractually requires a staging environment that mirrors production.
+**Revisit when.** A priced funding round closes, or a customer contractually requires a staging
+environment mirroring production.

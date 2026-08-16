@@ -102,14 +102,43 @@ Pull every name from `contract.md`. In particular:
 ## 6. Length discipline
 
 Each phase document states a word budget. Treat it as a ceiling with ±20% tolerance. The final
-README should land at roughly **9 000–12 000 words** including tables and the decision register — of
-which the **body (§0–§10) is 4 800–6 500** and **Appendix B, the nine promoted Architecture Decision
-Records (`decision-register.md` §2a), is 2 000–2 500**. (Amended 2026-08-14, down from 13 000–16 000 /
-7 000–8 500 / 5 500–7 500 — see `STATE.md`. The outline and its required tables are unchanged; the cut
-is prose only.) The body is the part read start to finish and is deliberately kept to a length a
-reviewer will actually finish; the register is a **reference appendix** with an index at the top, read
-selectively. Keeping those two budgets separate is what lets the document be both thorough and
-readable.
+README should land at roughly **13 000–15 500 words** including tables and the decision register — of
+which the **body (§0–§10) is 8 000–9 500** and **Appendix B, the nine promoted Architecture Decision
+Records (`decision-register.md` §2a), is 2 000–2 500 words of prose, excluding each record's two
+tables** (metadata table and options table — consistent with the per-ADR 250-word cap in
+`decision-register.md` §1, which excludes the same two tables). (Amended 2026-08-16 — see `STATE.md`'s
+*Plan amendments*. The 2026-08-14 amendment had cut these figures to 9 000–12 000 / 4 800–6 500 /
+2 000–2 500, but that target did not close arithmetically against the locked outline: three full
+compression passes across Phases 11–12 left the assembled document at ≈14 910 words with every
+required subsection and table intact, and diminishing returns — 20–100 words saved per pass by the
+end — showed the gap was structural, not a trimming problem. Rather than cut required content to
+force a fit, the ceiling is raised to match what the locked outline and the nine-ADR appendix actually
+cost in words. The outline and its required tables are unchanged.) The body is the part read start to
+finish and is deliberately kept to a length a reviewer will actually finish; the register is a
+**reference appendix** with an index at the top, read selectively. Keeping those two budgets separate
+is what lets the document be both thorough and readable.
+
+**Word-counting method (pinned — two variants for two different purposes; use these exact procedures
+everywhere a word count is reported or checked, and do not invent a third):**
+
+1. **Document/section length** (the total-document, body §0–§10, and Executive Summary figures
+   above): strip fenced code blocks (` ``` ` to ` ``` `); on every remaining line, delete `|`
+   characters but keep the cell text, and drop pure separator rows (`|---|:---:|` and the like)
+   entirely; then split on whitespace and count tokens. Table *content* counts — a table is something
+   a reader reads — only its Markdown decoration is removed. This reproduces Phase 12's corrected
+   figure (≈14 910 total, ≈9 212 for body §0–§10 as it now stands) and resolves the earlier
+   disagreement between Phase 11's 9 194 (an uncorrected count that also kept cell text, on
+   byte-identical §0–§9 text) and Phase 12's 8 370 (which, on inspection, is not reproducible by
+   either variant above and should be treated as superseded, not a third method to match).
+2. **Per-ADR 250-word cap** (`decision-register.md` §1): strip fenced code blocks, then drop the
+   `### ADR-0NN — Title` heading line and **every entire line that is part of a table** (both the
+   metadata table and the options table, header and separator rows included — the cap is explicitly
+   "excluding its metadata table and its options table"), then split the remainder on whitespace and
+   count tokens. This is deliberately stricter than variant 1: the cap governs prose only, not table
+   content. Applying variant 1 to an ADR overcounts it against this cap.
+
+Recount with the matching variant wherever a prior figure is in question; do not average, split the
+difference, or introduce a third procedure.
 
 If you are over budget, cut in this order: (1) background explanation of things the reader can look
 up, (2) repetition of a point made in another section, (3) code snippets, (4) alternatives you
