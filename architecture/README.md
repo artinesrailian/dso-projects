@@ -1386,7 +1386,7 @@ plain language, what it costs, and the observable trigger that would reopen it. 
 development produced twenty-nine, nearly one per consequential call across every chapter. The nine
 below are reproduced here in full — the hardest to reverse, and the ones the brief asks most directly
 to be justified. The other twenty are argued inline where each decision is made and summarized as a
-row in §10; their full ADR form is preserved in this repository's planning records, under `_plan/`.
+row in §10.
 
 | ADR | Title | Section | Pillars |
 |---|---|---|---|
