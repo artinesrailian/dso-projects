@@ -1,5 +1,8 @@
-# Root outputs. Phase 4 adds the remaining Karpenter output (helm_release_name).
-# See interface-contract.md SS4 for the full, final list this file must converge on.
+# Root outputs. helm_release_name (Phase 4) is deliberately NOT here — it's a
+# module-only output per interface-contract.md SS5.3, consumed by Phase 5 via
+# module.karpenter.helm_release_name wired directly in main.tf, not a root
+# output. See interface-contract.md SS4 for the full, final list this file
+# must converge on.
 
 output "vpc_id" {
   description = "ID of the dedicated VPC."

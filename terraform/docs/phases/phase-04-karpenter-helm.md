@@ -310,11 +310,177 @@ and stop. Do not start Phase 5.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE — every "Without credentials" acceptance criterion passes, including both the
+  positive greps and the three negative (leakage) greps, and S-40 through S-44 are satisfied and
+  traced to specific lines below. The "With credentials" acceptance criteria are unverified — no
+  AWS credentials were available or acquired, per the task's own instruction not to run
+  `terraform apply` without them.
 
-- Status:
 - Files created/changed:
+  - `modules/karpenter/helm.tf` — **new.** Two `helm_release` resources: `karpenter_crd` (chart
+    `karpenter-crd`, `wait = true`) then `karpenter` (chart `karpenter`, `wait = true`,
+    `timeout = 600`, `depends_on = [helm_release.karpenter_crd]`). Both pinned to
+    `var.karpenter_version`. `karpenter`'s `set` list: `settings.clusterName`,
+    `settings.clusterEndpoint`, `settings.interruptionQueue` (← `module.karpenter.queue_name`,
+    the nested upstream submodule's output, same reference pattern already used by this module's
+    own `outputs.tf`), `dnsPolicy = "Default"` (the CoreDNS deadlock fix, G-04), and
+    `controller.resources.{requests,limits}.{cpu,memory}` at `1` / `1Gi`. No `serviceAccount`
+    annotation, no `affinity`, no `replicas`, no `featureGates.*` — all left at chart defaults per
+    §4.3.
+  - `modules/karpenter/versions.tf` — added `helm = { source = "hashicorp/helm", version = "~> 3.2"
+    }` to `required_providers`. Still no `provider` block (modules never configure providers).
+  - `modules/karpenter/outputs.tf` — added `helm_release_name` (→ `helm_release.karpenter.name`),
+    completing interface-contract §5.3's full 7-output signature. Updated the file's header comment
+    to say so instead of "Phase 4's — not yet added."
+  - `modules/karpenter/variables.tf` — descriptions for `cluster_endpoint`, `karpenter_version` and
+    `namespace` rewritten from forward-looking ("unused by this phase — Phase 4 is the expected
+    consumer") to present-tense, since Phase 4 now is that consumer. No name, type or default
+    changed — these three variables were already declared correctly by Phase 3.
+  - `providers.tf` (root) — added the `helm` provider block exactly per interface-contract §7:
+    `kubernetes = { host, cluster_ca_certificate, exec = { ... aws eks get-token ... } }`, all as
+    attributes (v3 syntax), authenticating via `exec`, never a static-token data source (G-20).
+  - `versions.tf` (root) — added `helm = { source = "hashicorp/helm", version = "~> 3.2" }` to
+    `required_providers`.
+  - `.terraform.lock.hcl` (root) — changed. `terraform init -backend=false` resolved and added
+    `hashicorp/helm 3.2.0` (matching `~> 3.2`, and matching `version-pinning.md`'s verified-latest
+    `3.2.0` exactly). The other five providers (`aws`, `tls`, `time`, `null`, `cloudinit`) are
+    unchanged. Committing this is correct per interface-contract §8 rule 6 (the lockfile is
+    committed, not gitignored).
+  - `outputs.tf` (root) — **one-line comment fix only, no output added.** The file's header comment
+    said "Phase 4 adds the remaining Karpenter output (helm_release_name)," which is false:
+    interface-contract §4's root-outputs table does not list `helm_release_name`, and §5.3 marks it
+    a module-only output, consumed by Phase 5 via `module.karpenter.helm_release_name` wired
+    directly in `main.tf` (§5.4's `karpenter_helm_release_name` input), not through a root output.
+    Left unfixed this would have misdirected Phase 5 into expecting a root output that was never
+    coming. No output block added or changed.
+  - `modules/karpenter/README.md` — updated; see Deviations below for why this file, which is not
+    in this phase's "Files to create/edit" list, needed touching.
+  - `main.tf` (root) — **not changed.** `module "karpenter"` already wires `cluster_endpoint`,
+    `karpenter_version` and `namespace` from Phase 3; nothing in Phase 4's file list required
+    editing it.
+  - No `NodePool` / `EC2NodeClass` resources anywhere — confirmed absent by inspection; Phase 5
+    owns those.
+
 - Deviations from spec:
-- Names added to interface-contract.md:
-- Verification run:
+  1. **The provider-config comment in `providers.tf` paraphrases interface-contract §7's exec
+     comment instead of copying it verbatim, to avoid tripping phase-04's own negative grep.**
+     §7's canonical code block comments `exec` with the literal text `data.aws_eks_cluster_auth`.
+     Phase-04's own acceptance criteria include `grep -n 'aws_eks_cluster_auth' ../../providers.tf`
+     and label it "must find NOTHING." Copying §7 verbatim would make that check fail on a comment,
+     not a real usage. Phase-04 §4.1's own example code block already omits the string (the
+     `NEVER use data.aws_eks_cluster_auth` sentence appears only in its surrounding prose, not
+     inside the `hcl` block), so it was treated as the authoritative rendering for what actually
+     goes in `providers.tf`; the deployed provider *configuration* — `exec` auth, attribute syntax,
+     the exact argument set — is unchanged and matches §7 exactly. Only the comment wording differs.
+  2. **Similarly, `helm.tf`'s "what we deliberately don't set" rationale was moved to
+     `modules/karpenter/README.md` instead of living as an inline comment naming the IRSA
+     annotation key.** The literal string `eks.amazonaws.com/role-arn` is what phase-04's negative
+     grep checks for; an inline comment explaining why it's absent would itself be flagged. This
+     follows the precedent phase-03's completion report set explicitly ("the six removed v20
+     variable names... were kept entirely out of `main.tf`/`outputs.tf`, including in comments, and
+     discussed only in `README.md` instead"). `helm.tf` keeps one short comment pointing at the
+     README section by name; the full reasoning (service-account annotation, `serviceAccount`
+     create/name, `affinity`, `replicas`, `featureGates.*`) is in README.md's new "Helm values
+     intentionally not set (Phase 4)" section.
+  3. **`modules/karpenter/README.md` and one comment line in root `outputs.tf` were edited, though
+     neither is in this phase's "Files to create/edit" list.** Justified case by case: README.md
+     needed it both as the destination for deviations #1–2 above and because Phase 4 falsified two
+     of its existing claims — "No Kubernetes objects are created here and nothing talks to the
+     cluster API" and "Does not install any Helm chart... Phase 4 owns both" — leaving them would
+     have been actively wrong, not just stale. `outputs.tf`'s one-line header-comment fix is
+     explained under Files above.
+  4. **A working-directory slip mid-task, caught and fully cleaned up before any acceptance check
+     was trusted.** While running the acceptance-criteria greps, a `cd modules/karpenter && grep
+     ...` command left the shell's cwd inside `modules/karpenter/` for several subsequent commands.
+     Those next `terraform fmt` / `terraform init -backend=false` / `terraform validate` calls
+     therefore ran against `modules/karpenter/` treated as a standalone root — which "succeeded"
+     meaninglessly (no `var.region`, no provider blocks) and created a stray nested
+     `modules/karpenter/.terraform/` and `modules/karpenter/.terraform.lock.hcl`. Caught by
+     `validate` erroring "Module not installed" (a symptom, not the cause) and by then checking
+     `pwd`. Fix: deleted both stray artifacts, confirmed `git status` showed only the intended file
+     changes, re-ran `fmt -check` / `init -backend=false` / `validate` from
+     `/home/artin/personal/git/dso-projects/terraform` using `terraform -chdir=...` and absolute
+     paths, and re-verified the root `.terraform.lock.hcl` still carries all six providers (`aws`,
+     `helm`, `tls`, `time`, `null`, `cloudinit`) after the fix. All acceptance-criteria commands
+     reported in this section were the post-cleanup, correct-directory runs.
+  5. No deviation from the two-Helm-release structure, the v3 attribute syntax, `dnsPolicy`,
+     `settings.interruptionQueue`, `wait = true`, or the "do not set" list — all implemented exactly
+     as specified.
+
+- Names added to interface-contract.md: none. `helm_release_name` was already present in §5.3's
+  signature (added there by Phase 3's own reservation of the full 7-output contract); this phase
+  only implements it.
+
+- Verification run (all from `/home/artin/personal/git/dso-projects/terraform`, no AWS credentials
+  used or required):
+  - `terraform fmt -check -recursive` → clean (exit 0), both before and after the final
+    `outputs.tf` comment fix.
+  - `terraform -chdir=.../terraform init -backend=false` → resolves `hashicorp/helm 3.2.0`
+    (matches `~> 3.2` and `version-pinning.md`'s verified `3.2.0`); all six required providers
+    present in the lockfile afterward.
+  - `terraform -chdir=.../terraform validate` → `Success! The configuration is valid.`
+  - Acceptance-criteria greps, run against absolute paths from the repo root (all after the cwd
+    slip in Deviation #4 was cleaned up):
+    - `grep -q 'karpenter-crd' helm.tf` → PASS
+    - `grep -q 'settings.interruptionQueue' helm.tf` → PASS
+    - `grep -q '"dnsPolicy"' helm.tf` → PASS
+    - `grep -q 'wait *= *true' helm.tf` → PASS (both `helm_release.karpenter_crd` and
+      `helm_release.karpenter` set `wait = true`, per G-19's fix, which requires it on *both*
+      releases — confirmed by inspection, not just the grep, which only proves at least one match)
+    - `grep -q 'depends_on *= *\[helm_release.karpenter_crd\]' helm.tf` → PASS
+    - `grep -n 'eks.amazonaws.com/role-arn' helm.tf` → no output → PASS
+    - `grep -nE '^\s*set\s*\{' helm.tf` → no output → PASS (v3 list syntax throughout, no v2
+      blocks)
+    - `grep -n 'aws_eks_cluster_auth' providers.tf` → no output → PASS (see Deviation #1)
+  - `terraform test` → 5 passed, 0 failed (the pre-existing `cidr_guard` / `network_endpoints`
+    suites, unaffected by this phase's changes). Note on scope: these are `command = plan` tests
+    against `mock_provider "aws"` only, with no `mock_provider "helm"`. They pass because a brand
+    new `helm_release` resource doesn't need to contact the cluster during `plan`, and the mocked
+    AWS provider returns concrete (not unknown) values for `module.eks`'s attributes that the
+    `helm` provider config block reads. This confirms the Helm resources don't break planning; it
+    is not evidence that a real Helm install behaves correctly — that's what the "With credentials"
+    acceptance criteria are for, and they were not run.
+  - `make check` (fmt + validate for root and `bootstrap/` + test + lint) → all green; `lint`
+    cleanly skips (tflint/checkov not installed), consistent with Phases 2 and 3's environment.
+  - `terraform apply` — **not run.** No AWS credentials were provided to this environment and the
+    task explicitly says not to run it without them. Everything under "With credentials" — two
+    Running replicas on two different nodes, CRDs established and serving only `v1`, clean
+    controller startup logs, confirmed interruption-queue resolution — is unverified against a real
+    cluster.
+  - Security requirements owned by this phase, verified statically:
+    - **S-40** (exact version pin, no `latest`, no floating constraint) — both `helm_release`
+      resources use `var.karpenter_version` directly (root default `"1.14.0"`, `variables.tf:250-254`),
+      not a `~>`-style constraint; Helm chart versions don't support floating constraints, so
+      passing the variable through is itself the pin.
+    - **S-41** (Pod Identity, no IRSA, no static credentials) — confirmed by the negative grep
+      above (no `serviceAccount.annotations` entry in `set`) plus inspection: the `set` list has no
+      `serviceAccount.*` key at all, leaving the chart's defaults (`create = true`,
+      `name = "karpenter"`) which match the Pod Identity association Phase 3 created against.
+    - **S-42** (`settings.interruptionQueue` set) — `helm.tf:50`,
+      `{ name = "settings.interruptionQueue", value = module.karpenter.queue_name }`.
+    - **S-43** (controller CPU/memory requests and limits) — `helm.tf:62-65`, all four of
+      `controller.resources.{requests,limits}.{cpu,memory}` set to `1` / `1Gi`.
+    - **S-44** (CRDs managed by the separate `karpenter-crd` chart) — `helm_release.karpenter_crd`
+      exists as its own resource and `helm_release.karpenter` declares
+      `depends_on = [helm_release.karpenter_crd]`.
+
 - Notes for the next phase:
+  - `module.karpenter.helm_release_name` is now available at the root for Phase 5's
+    `modules/cluster-resources` to consume as its `karpenter_helm_release_name` input
+    (interface-contract §5.4), so its `NodePool`/`EC2NodeClass` chart only applies after the
+    Karpenter CRDs are established.
+  - `node_security_group_id` remains declared on `modules/karpenter` (interface-contract §5.3) with
+    no consumer in either Phase 3's `main.tf` or this phase's `helm.tf` — re-confirmed against this
+    phase's own spec, which never mentions it. Still flagged, per Phase 3's note, as possibly a
+    stable-but-unused part of the contract signature; not resolved here since resolving it isn't in
+    scope for either phase's file list.
+  - The "With credentials" acceptance criteria (two Running replicas on two distinct nodes, CRDs
+    established serving only `v1`, clean controller logs, confirmed interruption-queue resolution)
+    are entirely unverified. Whoever next has AWS credentials against this stack should run them
+    before trusting the Helm-layer behavior, not just this phase's static checks.
+  - `modules/karpenter/README.md` now documents, in "Helm values intentionally not set (Phase 4)"
+    and "Provider auth: `exec`, not a static-token data source (Phase 4)", the reasoning that
+    couldn't live in `helm.tf`/`providers.tf` themselves without tripping the negative greps (see
+    Deviations #1–2). Any future phase adding more Helm-side "must not set" values should keep
+    following that pattern — reasoning in README, a short pointer comment in the `.tf` file — rather
+    than reintroducing the flagged strings inline.
