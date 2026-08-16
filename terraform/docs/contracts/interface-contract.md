@@ -205,7 +205,7 @@ constrained ones carry a `validation` block.
 | `bootstrap_node_max_size` | `number` | `3` | |
 | `bootstrap_node_desired_size` | `number` | `2` | Note: the EKS module **ignores** changes to this after creation (see `reference/gotchas.md` G-06). |
 | `taint_bootstrap_nodes` | `bool` | `true` | Taints the bootstrap group `CriticalAddonsOnly=true:NoSchedule` so user workloads only land on Karpenter nodes. |
-| `create_spot_service_linked_role` | `bool` | `true` | Creates/adopts `AWSServiceRoleForEC2Spot` so a fresh account needs no manual step. See phase-03 for the idempotency handling. |
+| `create_spot_service_linked_role` | `bool` | `false` (changed from `true` in Phase 3 — see its completion report) | Creates `AWSServiceRoleForEC2Spot`. Defaults `false` because the resource errors if the role already exists (any account that has used Spot before) and a root-level `import` block was found to hard-fail `terraform apply` on the fresh-account case instead — see `modules/karpenter/README.md`. Set `true` only after confirming the role does not already exist. |
 | `request_service_quotas` | `bool` | `true` | Opens vCPU quota-increase requests in code (P3). Approval is asynchronous — apply success ≠ quota raised. |
 | `vcpu_quota_target` | `number` | `128` | Must exceed `nodepool_cpu_limit` + the bootstrap group, or the account quota becomes the real ceiling. |
 | `developer_rbac_group` | `string` | `"opsfleet:developers"` | Kubernetes group bound to the developer ClusterRole. Access entries reference it via `kubernetes_groups`; **no AWS managed access policy is associated.** |
@@ -243,6 +243,7 @@ Any phase adding a variable adds a row here **in the same change**.
 | `private_subnet_ids` | |
 | `public_subnet_ids` | |
 | `karpenter_node_iam_role_name` | Role assumed by Karpenter-launched nodes. |
+| `karpenter_node_iam_role_arn` | ARN of the role assumed by Karpenter-launched nodes. Added in Phase 3 — consumed by the phase's own "with credentials" acceptance criteria to resolve the node access entry by principal ARN. |
 | `karpenter_controller_iam_role_arn` | Role assumed by the Karpenter controller. |
 | `karpenter_interruption_queue_name` | SQS queue for Spot interruption / rebalance events. |
 | `configure_kubectl` | Ready-to-run string: `aws eks update-kubeconfig --region <r> --name <n>`. |

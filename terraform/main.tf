@@ -1,5 +1,6 @@
 # Root composition. Module blocks only — no resources.
-# Phases 3-4 add module.karpenter, Phase 5 adds module.cluster_resources.
+# Phase 4 extends module.karpenter's Helm release wiring, Phase 5 adds
+# module.cluster_resources.
 
 module "network" {
   source = "./modules/network"
@@ -49,6 +50,22 @@ module "eks" {
   taint_bootstrap_nodes         = var.taint_bootstrap_nodes
 
   enable_metrics_server = var.enable_metrics_server
+
+  tags = local.tags
+}
+
+module "karpenter" {
+  source = "./modules/karpenter"
+
+  cluster_name     = module.eks.cluster_name
+  cluster_endpoint = module.eks.cluster_endpoint
+
+  karpenter_version = var.karpenter_version
+  namespace         = var.karpenter_namespace
+
+  node_security_group_id = module.eks.node_security_group_id
+
+  create_spot_service_linked_role = var.create_spot_service_linked_role
 
   tags = local.tags
 }
