@@ -22,13 +22,18 @@ kubectl get pods -n demo -o wide
 kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type
 ```
 
+> `nodeclaims` and `nodes` are cluster-scoped — your developer access is namespace-scoped and does
+> not grant them, so those two commands return `Forbidden`. That's expected, not a broken cluster:
+> `kubectl get pods -n demo -o wide` already tells you your pod is running; ask the platform team if
+> you need to see which node/architecture it landed on.
+
 ## 3. Run on x86 (amd64)
 
 Same file, one line different (`kubernetes.io/arch: amd64`):
 
 ```bash
 kubectl apply -f deployment-x86.yaml
-kubectl get nodes -L kubernetes.io/arch      # now both architectures present
+kubectl get nodes -L kubernetes.io/arch      # now both architectures present (needs cluster-level access, see note above)
 ```
 
 ## 4. The recommended pattern: build multi-arch and skip the label

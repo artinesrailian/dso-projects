@@ -591,6 +591,11 @@ docs/phases/phase-06-demo-workloads.md and stop. Do not start Phase 7.
      container") is protecting against; the LimitRange's `default: {cpu: "1", ...}` (phase-05
      §5.3c) fills in a CPU limit automatically at admission if a cluster operator wants one enforced.
 
+- Names added to interface-contract.md: `examples/README.md` and
+  `examples/deployment-multiarch-preferred.yaml`, both added to §1's `examples/` tree — see
+  Deviation #1 and the `docs/contracts/interface-contract.md` entry under "Files created/changed"
+  above for why.
+
 - **Actual `kubectl logs -n demo job/arch-check` output** (or why it could not be run): **Not
   run — no EKS/Karpenter cluster reachable.** The only `kubectl` context configured on this
   machine (`panda-dev-admin@panda-dev`, API server at a private/local IP) is an unrelated cluster:
