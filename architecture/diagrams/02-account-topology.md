@@ -41,14 +41,11 @@ flowchart TB
     sandbox["innovate-sandbox-*<br/>(future)"]
   end
 
-  suspended["OU: Suspended<br/>decommissioned accounts, deny-all"]
-
   root --> mgmt
   root --> sec_ou
   root --> infra_ou
   root --> workloads_ou
   root --> sandbox_ou
-  root --> suspended
 
   mgmt -.->|"SSO session"| dev
   mgmt -.->|"SSO session"| staging
@@ -68,7 +65,6 @@ flowchart TB
   classDef ops fill:#EDE7F6,stroke:#4527A0,stroke-width:1px,color:#111
   classDef compute fill:#E3F2FD,stroke:#1565C0,stroke-width:1px,color:#111
   classDef external fill:#ECEFF1,stroke:#455A64,stroke-width:1px,color:#111
-  class root,suspended external
   class mgmt,log,sectool security
   class shared,network ops
   class dev,staging,prod,sandbox compute
@@ -81,7 +77,6 @@ flowchart TB
 | Pink (`security`) | Management and security accounts — govern and audit, no workloads |
 | Purple (`ops`) | Infrastructure accounts — shared services, later the network account |
 | Blue (`compute`) | Workload accounts — dev, staging, prod, future per-engineer sandboxes |
-| Grey (`external`) | The organization root and the Suspended OU exit path |
 | Dashed edge | An identity session or log/finding delivery, not a network path |
 
 > **Note.** Permission sets and the six SCP guardrail families are omitted; see §1 Cloud Environment
