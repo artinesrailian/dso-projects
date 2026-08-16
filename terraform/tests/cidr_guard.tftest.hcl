@@ -27,6 +27,38 @@ mock_provider "aws" {
       })
     }
   }
+
+  # Phase 2's module.eks builds IAM managed-policy ARNs from
+  # data.aws_partition.current.partition (e.g. "${partition}:iam::aws:policy/...").
+  # The default mock returns a random string instead of "aws", which fails AWS
+  # provider ARN validation on every aws_iam_role_policy_attachment the eks
+  # module creates.
+  mock_data "aws_partition" {
+    defaults = {
+      partition  = "aws"
+      dns_suffix = "amazonaws.com"
+    }
+  }
+
+  # Same failure mode, via data.aws_caller_identity.current.arn feeding
+  # data.aws_iam_session_context (used to resolve the cluster-creator access
+  # entry principal) — the default mock's placeholder ARN doesn't parse.
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "123456789012"
+      arn        = "arn:aws:iam::123456789012:role/mock-terraform-test"
+      user_id    = "AIDACKCEVSQ6C2EXAMPLE"
+    }
+  }
+
+  # enable_cluster_creator_admin_permissions = true reads
+  # data.aws_iam_session_context.current[0].issuer_arn for the cluster_creator
+  # access entry's principal_arn — same "invalid ARN" failure otherwise.
+  mock_data "aws_iam_session_context" {
+    defaults = {
+      issuer_arn = "arn:aws:iam::123456789012:role/mock-terraform-test"
+    }
+  }
 }
 
 # The guard must REJECT an internet-open endpoint.

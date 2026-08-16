@@ -25,6 +25,29 @@ mock_provider "aws" {
       })
     }
   }
+
+  # See cidr_guard.tftest.hcl for why module.eks needs both of these mocked
+  # explicitly once it's wired into the plan.
+  mock_data "aws_partition" {
+    defaults = {
+      partition  = "aws"
+      dns_suffix = "amazonaws.com"
+    }
+  }
+
+  mock_data "aws_caller_identity" {
+    defaults = {
+      account_id = "123456789012"
+      arn        = "arn:aws:iam::123456789012:role/mock-terraform-test"
+      user_id    = "AIDACKCEVSQ6C2EXAMPLE"
+    }
+  }
+
+  mock_data "aws_iam_session_context" {
+    defaults = {
+      issuer_arn = "arn:aws:iam::123456789012:role/mock-terraform-test"
+    }
+  }
 }
 
 run "endpoints_off_plans_clean" {

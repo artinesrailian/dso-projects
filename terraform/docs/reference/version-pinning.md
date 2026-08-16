@@ -43,7 +43,8 @@ those tightly.
 | `hashicorp/tls` | `4.3.0` | `~> 4.3` | Required transitively by the eks module (`>= 4.0`). |
 | `hashicorp/time` | `0.14.0` | `~> 0.14` | **Required by the eks module (`>= 0.9`) and easy to forget.** A `required_providers` block without it is incomplete. |
 | `hashicorp/random` | `3.9.0` | `~> 3.9` | Only if you generate suffixes. |
-| `hashicorp/null` | `3.3.0` | `~> 3.3` | Probably not needed — no provisioners in this stack. |
+| `hashicorp/null` | `3.3.0` | `~> 3.3` | Pulled in transitively by the eks module's `eks-managed-node-group` submodule (bootstrap node group, Phase 2) — not "probably not needed" after all; no provisioners of our own regardless. |
+| `hashicorp/cloudinit` | `2.4.0` | `~> 2.4` | Not anticipated when this table was first written. Pulled in transitively by the same `eks-managed-node-group` submodule for its user-data rendering. Resolved version verified via `terraform init` on 2026-08-16, not re-checked against the registry independently. |
 
 ### Modules
 
