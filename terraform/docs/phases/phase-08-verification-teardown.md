@@ -157,6 +157,23 @@ kubectl auth can-i $G list nodes              | grep -qx no || fail "developer c
 kubectl auth can-i $G get nodepools.karpenter.sh | grep -qx no || fail "developer can read NodePools"
 ```
 
+**D2b. The one alarm is actually able to fire**
+
+S-29 claims a confirmed subscription and a working detector. Both halves can be silently dead:
+
+```bash
+# SNS returns the literal "PendingConfirmation" in place of an ARN until somebody
+# clicks the link in the email. An unconfirmed topic is a silent alarm.
+aws sns list-subscriptions-by-topic --topic-arn "$TOPIC" \
+  --query 'Subscriptions[?Protocol==`email`].SubscriptionArn' --output text \
+  | grep -qv PendingConfirmation || fail "SNS subscription never confirmed — CMK alarm cannot notify"
+
+# The KMS alarm is an EventBridge rule on CloudTrail events. No trail, no events,
+# no alarm — and nothing else in this build would tell you.
+[ "$(aws cloudtrail describe-trails --query 'length(trailList)' --output text)" != "0" ] \
+  || fail "no CloudTrail — the CMK alarm can never fire"
+```
+
 **D3. The guardrails exist and are Terraform-owned**
 
 ```bash
@@ -252,6 +269,19 @@ fi
 
 echo "==> 4/6 terraform destroy"
 terraform destroy -auto-approve
+
+echo "==> 4b/6 Sweeping EBS volumes left by PVCs"
+# StatefulSet volumeClaimTemplates are RETAINED by default when the workload is
+# deleted, and dynamically-provisioned PVs are invisible to Terraform. Left
+# alone, the spend outlives the cluster — gp3 is ~$0.08/GiB-month forever.
+aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag:kubernetes.io/cluster/$CLUSTER,Values=owned" "Name=status,Values=available" \
+  --query 'Volumes[].VolumeId' --output text | tr '\t' '\n' | grep -v '^$' \
+  | xargs -r -I{} aws ec2 delete-volume --region "$REGION" --volume-id {}
+# Also check for volumes tagged by the CSI driver but not the cluster tag:
+aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true" "Name=status,Values=available" \
+  --query 'Volumes[].{id:VolumeId,size:Size,name:Tags[?Key==`CSIVolumeName`]|[0].Value}' --output table
 
 echo "==> 5/6 Sweeping launch templates Karpenter created outside Terraform state"
 aws ec2 describe-launch-templates --region "$REGION" \

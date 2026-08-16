@@ -70,7 +70,6 @@ terraform/                            # ← working directory; everything below 
 │   └── cluster-resources/          # Phase 5 (NodePool / EC2NodeClass CRs)
 │       └── chart/                    # local Helm chart holding the Karpenter CRs
 └── examples/                         # Phase 6 — developer-facing demo manifests
-    ├── namespace.yaml
     ├── deployment-x86.yaml
     ├── deployment-arm64.yaml
     ├── deployment-multiarch.yaml

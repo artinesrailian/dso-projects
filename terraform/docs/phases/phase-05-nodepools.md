@@ -223,12 +223,46 @@ kind: ResourceQuota
 metadata: { name: {{ . }}-quota, namespace: {{ . }} }
 spec:
   hard:
+    # --- compute -----------------------------------------------------------
     requests.cpu: {{ $.Values.namespaceQuota.requestsCpu | quote }}
     requests.memory: {{ $.Values.namespaceQuota.requestsMemory | quote }}
     limits.cpu: {{ $.Values.namespaceQuota.limitsCpu | quote }}
     limits.memory: {{ $.Values.namespaceQuota.limitsMemory | quote }}
+
+    # --- storage: the expensive omission ----------------------------------
+    # The EBS CSI driver is installed and §2.5b ships a DEFAULT StorageClass, so
+    # a bare PVC provisions real EBS. gp3 tops out at 16 TiB (~$1,310/mo each)
+    # and a pod can mount ~25. Twenty volumes is ~$26,000/month while consuming
+    # 100m of the CPU quota. Worse, StatefulSet volumeClaimTemplates are RETAINED
+    # on delete and teardown.sh does not sweep EBS — the spend outlives the
+    # cluster. A quota with no storage dimension is not a cost control.
+    persistentvolumeclaims: "10"
+    requests.storage: 200Gi
+    gp3.storageclass.storage.k8s.io/requests.storage: 200Gi
+
+    # --- ephemeral storage -------------------------------------------------
+    # An emptyDir with no sizeLimit fills the 50 GiB node root volume, triggers
+    # DiskPressure, and the kubelet evicts OTHER developers' pods off that node.
+    requests.ephemeral-storage: 20Gi
+    limits.ephemeral-storage: 40Gi
+
+    # --- object counts -----------------------------------------------------
+    # count/deployments alone is trivially sidestepped: the Role also grants
+    # statefulsets, bare replicasets, jobs and cronjobs. A CronJob with
+    # `schedule: "* * * * *"` and concurrencyPolicy Allow is the classic
+    # accident. count/pods also bounds VPC IP consumption (ADR-1 sizes subnets
+    # for exactly this).
+    count/pods: "100"
     count/deployments.apps: {{ $.Values.namespaceQuota.maxDeployments | quote }}
+    count/statefulsets.apps: "10"
+    count/replicasets.apps: "50"
+    count/jobs.batch: "20"
+    count/cronjobs.batch: "10"
+    count/services: "20"
+
+    # --- exposure ----------------------------------------------------------
     services.loadbalancers: "0"
+    services.nodeports: "0"
 ---
 apiVersion: v1
 kind: LimitRange
@@ -236,9 +270,28 @@ metadata: { name: {{ . }}-limits, namespace: {{ . }} }
 spec:
   limits:
     - type: Container
-      defaultRequest: { cpu: 100m, memory: 128Mi }
-      default:        { cpu: "1",  memory: 1Gi }
-      max:            { cpu: "4",  memory: 8Gi }
+      # Karpenter sizes nodes from resource REQUESTS. A pod with none looks
+      # free, so Karpenter bin-packs it and it then fights real workloads for
+      # CPU and memory on a shared node. defaultRequest fixes the UNSET case.
+      defaultRequest: { cpu: 100m, memory: 128Mi, ephemeral-storage: 1Gi }
+      default:        { cpu: "1",  memory: 1Gi,   ephemeral-storage: 2Gi }
+      max:            { cpu: "4",  memory: 8Gi,   ephemeral-storage: 4Gi }
+      # `min` is what stops node-count amplification. defaultRequest applies
+      # ONLY when the field is unset — an explicit `cpu: 1m` is admitted without
+      # it. Combine that with a required podAntiAffinity on hostname (which
+      # phase-06's own example teaches, and which every "spread isn't working"
+      # answer online escalates to DoNotSchedule) and 50 replicas cost 50m of a
+      # 20-CPU quota while forcing 50 NODES — which consolidation can never
+      # reclaim, because the pods are structurally forbidden from sharing one.
+      # The NodePool limit caps vCPU, not node count.
+      min:            { cpu: 50m, memory: 64Mi }
+    - type: Pod
+      # The largest admissible pod must fit the largest launchable node
+      # (instance-cpu tops out at 16), or it is unschedulable forever.
+      max: { cpu: "8", memory: 16Gi }
+    - type: PersistentVolumeClaim
+      max: { storage: 50Gi }
+      min: { storage: 1Gi }
 {{- end }}
 ```
 
@@ -274,6 +327,8 @@ metadata:
 rules:
   # --- The job: ship and run a workload -------------------------------------
   - apiGroups: ["apps"]
+    # deployments/rollback is deliberately absent — the subresource was removed
+    # from Kubernetes in 1.16 and granting it is dead weight.
     resources: [deployments, replicasets, statefulsets,
                 deployments/scale, statefulsets/scale, replicasets/scale]
     verbs: [get, list, watch, create, update, patch, delete]
@@ -289,8 +344,8 @@ rules:
     resources: [pods/log, pods/status, events]
     verbs: [get, list, watch]
   - apiGroups: ["metrics.k8s.io"]
-    resources: [pods, nodes]
-    verbs: [get, list]            # kubectl top
+    resources: [pods]             # NOT nodes — cluster-scoped, see below
+    verbs: [get, list]            # kubectl top pods
 
   # --- Follow the guidance we give them -------------------------------------
   # The README tells developers to set a PodDisruptionBudget on a Spot cluster
@@ -311,9 +366,13 @@ rules:
   - apiGroups: [""]
     resources: [persistentvolumeclaims]
     verbs: [get, list, watch, create, update, patch, delete]
-  - apiGroups: ["storage.k8s.io"]
-    resources: [storageclasses]
-    verbs: [get, list, watch]     # read-only: they pick one, they do not define one
+  # NOTE: storageclasses and metrics.k8s.io/nodes are CLUSTER-SCOPED. A
+  # ClusterRole bound by a RoleBinding cannot grant them — RBAC silently ignores
+  # such rules, so `kubectl get storageclass` is denied however it is written
+  # here. They are omitted rather than listed-and-dead. If developers need to
+  # read StorageClasses, that requires a separate, narrowly-scoped
+  # ClusterRoleBinding — a deliberate decision, not a line in this Role.
+  # The default StorageClass means they never have to name one.
 
   # --- Debugging: a deliberate, bounded exception ---------------------------
   # exec is genuinely needed to debug a container and is scoped to this
@@ -348,13 +407,65 @@ subjects:
 
 | Not granted | Reason |
 |---|---|
-| `secrets` (any verb) | The whole point. Nobody reads anyone's credentials. AWS access comes from a Pod Identity association an operator creates; app secrets come from the platform team. A pod can still *mount* a secret — the kubelet reads it, not the user. |
+| `secrets` (any verb) | Stops casual and accidental exposure: no `kubectl get secret`, no `-o yaml`, nothing in a shell history. **It does not stop a deliberate user** — see the boundary note below. AWS access comes from a Pod Identity association an operator creates; app secrets come from the platform team. |
 | `serviceaccounts` create / **impersonate** | `impersonate` is a direct escalation to any workload identity in the namespace. Pods use `default` or an operator-created SA. |
 | `daemonsets` | One pod per node, growing with the cluster; contrary to the intent of a per-namespace quota. |
 | `ingresses`, `services/proxy` | Exposure is an operator decision, consistent with `services.loadbalancers: 0` in the quota. |
 | `networkpolicies` | A developer must not be able to edit isolation. |
-| `roles`, `rolebindings` | Self-escalation. Note `AmazonEKSAdminPolicy` *does* grant these — another reason not to reach for the managed policies. |
+| `roles`, `rolebindings` | Self-escalation. `AmazonEKSAdminPolicy` *does* grant these — though it withholds `escalate` and `bind`, so the API server's escalation-prevention check confines its holder to granting only what they already hold. Still more than a developer needs. |
 | Anything cluster-scoped — `nodes`, `namespaces`, `nodepools`, `ec2nodeclasses`, CRDs, webhooks | A RoleBinding cannot grant them, by construction. |
+
+#### What RBAC cannot reach — read this before trusting the table above
+
+Two things this Role **does not** prevent, both flowing from one grant: `pods: create` with an
+arbitrary pod spec.
+
+**1. A determined developer can read every Secret in the namespace.** Not via `kubectl get secret` —
+that is denied and the assertion below genuinely passes. Via the pod spec:
+
+```bash
+# Deployments are readable (granted), so secret NAMES are discoverable from
+# secretKeyRef / secretRef / volumes[].secret.secretName. `list` on secrets is
+# not needed.
+kubectl create -f - <<'EOF'   # then: kubectl logs exfil
+apiVersion: v1
+kind: Pod
+metadata: { name: exfil, namespace: demo }
+spec:
+  containers:
+    - name: c
+      image: public.ecr.aws/docker/library/busybox:latest
+      envFrom: [{ secretRef: { name: db-creds } }]
+      command: ["sh","-c","env"]
+EOF
+```
+
+Two minutes, no `exec`, no secrets verb. **There is no RBAC rule that fixes this**, because the
+authorization decision is on the *pod*, and the pod is legitimately theirs to create.
+
+**2. A Pod Identity association is namespace-wide, and keyed by ServiceAccount *name*.** The
+association is `(cluster, namespace, serviceAccountName)`. `spec.serviceAccountName` is an ordinary
+pod-spec field — there is **no authorization check** on a pod's reference to a ServiceAccount.
+Withholding `serviceaccounts: create` and `impersonate` does not close it. So the moment an operator
+creates the first Pod Identity association in a namespace, **every principal with pod-create rights
+in that namespace holds that IAM role.**
+
+**The boundary is the namespace, not the Role.** Consequences that are now non-negotiable:
+
+- A shared `demo` namespace is fine for a POC demo where nothing sensitive exists.
+- **One namespace per team** is required the moment two teams' work coexists — add each to *both*
+  `developer_namespaces` and `governed_namespaces` (the precondition enforces the pairing) and each
+  gets its own quota, LimitRange and PSA labels automatically.
+- **A dedicated namespace is a precondition for the first Pod Identity association**, not an
+  afterthought. Phase-06 §6.8 and operator-runbook §4 must say so.
+- If you must share a namespace and still constrain this, the in-tree tool is a
+  `ValidatingAdmissionPolicy` (GA since 1.30, no controller, no cost) restricting which Secrets a pod
+  may reference — the same reasoning that made PSA preferable to Kyverno.
+
+One property worth stating in the Role's favour: this design **fails closed**. If the chart has not
+applied, the access entry names a group with no RBAC and developers get nothing. The
+`AmazonEKSEditPolicy` design failed **open** — the association granted access whether or not the
+guardrails existed.
 
 **Verify the boundary rather than trusting it** — `kubectl auth can-i` evaluates real RBAC (unlike
 with AWS access policies, where it reports nothing):

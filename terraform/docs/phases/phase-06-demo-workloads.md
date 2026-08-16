@@ -313,7 +313,6 @@ spec:
 Short, task-oriented, written for a developer. It must cover:
 
 1. Get access: `aws eks update-kubeconfig --region <region> --name <cluster>`
-2. `kubectl apply -f namespace.yaml`
 3. Run on Graviton — apply, then **watch a node get created**:
    ```bash
    kubectl apply -f deployment-arm64.yaml
@@ -382,6 +381,11 @@ kubeconform -strict -summary -kubernetes-version 1.36.0 *.yaml
 # not schema errors. Still better than a check that cannot run at all.
 python3 -c "import yaml,sys; [list(yaml.safe_load_all(open(f))) for f in sys.argv[1:]]; print('PASS: all files parse')" *.yaml
 
+# The namespace belongs to Terraform (phase-05 §5.3c). A namespace.yaml here
+# would be a second source of truth, and following it yields an unlabelled,
+# unquota'd namespace that silently voids S-64 and S-28a.
+[ -e namespace.yaml ] && echo "FAIL: delete namespace.yaml — phase-05 owns the namespace"
+
 # Every workload image must come from public ECR (Docker Hub rate limits).
 grep -h 'image:' *.yaml | grep -v 'public.ecr.aws' && echo "FAIL: non-ECR image" || echo "PASS: all images from public ECR"
 
@@ -407,7 +411,6 @@ done
 With a cluster — **this is the assignment's acceptance test, run it properly**:
 
 ```bash
-kubectl apply -f namespace.yaml
 
 # --- Graviton ---
 kubectl apply -f deployment-arm64.yaml
