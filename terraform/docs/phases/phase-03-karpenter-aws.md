@@ -491,11 +491,21 @@ and stop. Do not start Phase 4.
     zero-configuration story P2 originally promised. `terraform.tfvars.example` does not currently
     mention this variable at all — Phase 7 should consider whether it needs a commented-out
     example line given the default changed.
-  - **Phase 8's `verify.sh`** (not yet written — out of scope for this phase, which has no file
-    list entry for it) should assert `AWSServiceRoleForEC2Spot` actually exists before/after
-    apply, per §3.7's fallback text ("so the gap is detected rather than merely documented"). Right
-    now that gap is only documented (in `modules/karpenter/README.md` and here), not asserted in
-    code anywhere. Flagging explicitly so Phase 8 doesn't have to rediscover it.
+  - **Decision: §3.7's fallback is a two-part instruction — default the toggle to `false` *and*
+    add "an explicit `verify.sh` assertion that the role exists." Only the first half is done here,
+    deliberately.** `scripts/verify.sh` is not in this phase's "Files to create" list; it is
+    explicitly Phase 8's deliverable (`docs/phases/phase-08-verification-teardown.md`, "Files to
+    create"). Writing it now would mean this phase creating a file it has no mandate to create, and
+    partially pre-empting a phase whose own spec ("§8.1") defines that script's structure
+    (`pass`/`fail`/`check` skeleton, section layout, non-zero exit convention) in more detail than
+    anything here does. So the file-list boundary governs over §3.7's prose, and the assertion half
+    is *deferred to Phase 8*, not silently dropped: right now the gap between "toggle exists" and
+    "role's actual existence is checked" is only documented (`modules/karpenter/README.md` and
+    here), not asserted in code anywhere. Phase 8, when implemented, must add a check resolving to
+    something like `aws iam get-role --role-name AWSServiceRoleForEC2Spot` (pass unconditionally —
+    the role must exist by that point in the flow regardless of which path, Terraform-managed or
+    pre-existing, put it there) to `scripts/verify.sh`'s section B. Flagging explicitly so Phase 8
+    doesn't have to rediscover it.
   - **`node_security_group_id`** is declared on `modules/karpenter` (interface-contract §5.3
     requires it) but has no consumer in this phase and none identified for Phase 4 either — Phase
     4's own doc (`phase-04-karpenter-helm.md`) should be checked for whether it expects this input
