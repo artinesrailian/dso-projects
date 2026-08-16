@@ -125,7 +125,6 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=200 \
 This is the section that matters most. Do not shortcut it:
 
 ```bash
-kubectl apply -f examples/namespace.yaml
 kubectl apply -f examples/deployment-arm64.yaml
 kubectl wait --for=condition=available --timeout=10m deployment/web-graviton -n demo
 

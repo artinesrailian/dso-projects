@@ -31,7 +31,6 @@ copy one file, change the image, and ship. Nothing here should require knowing w
 
 ```
 examples/README.md
-examples/namespace.yaml
 examples/deployment-x86.yaml
 examples/deployment-arm64.yaml
 examples/deployment-multiarch.yaml
@@ -91,86 +90,28 @@ docker inspect --format 'User={{.Config.User}} Ports={{.Config.ExposedPorts}}' \
 # Verified 2026-08-11: User=101, ExposedPorts=map[8080/tcp:{}]
 ```
 
-### 6.2 `namespace.yaml` — and enforce pod security while you are here
+### 6.2 The `demo` namespace is **not** yours to create
 
-The `demo` namespace, kept separate so Phase 8's teardown can delete one object. But it also carries
-**Pod Security Admission** labels, which turn §6.3's `securityContext` from a good example into an
-API-server-enforced rule:
+Terraform creates it, with its Pod Security labels, ResourceQuota and LimitRange — see phase-05
+§5.3c. **Do not ship an `examples/namespace.yaml`**, and do not tell anyone to
+`kubectl create namespace demo`.
 
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: demo
-  labels:
-    # In-tree Pod Security Admission. Two labels, no controller, no cost, no IAM.
-    # `restricted` is the strictest built-in profile: it requires runAsNonRoot,
-    # forbids privilege escalation, requires dropping ALL capabilities and a
-    # seccomp profile. The API server now REJECTS a pod that violates §6.3
-    # instead of merely not modelling it.
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: v1.36
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-```
+The reason is an ordering guarantee worth stating in `examples/README.md`: Phase 2 grants developers
+edit rights on this namespace *in Terraform*. If the guardrails were a manual `kubectl apply`, then
+`terraform apply` would hand out access to a namespace that might have no quota and no pod security,
+and nothing would reconcile it afterwards. Both halves are Terraform, so they cannot drift apart.
 
-Note that `restricted` also requires `seccompProfile.type: RuntimeDefault` on every pod — so §6.3's
-`securityContext` must include it or the demo will be rejected by the very control you just added.
-Test it.
+What developers need to know, and what belongs in `examples/README.md`:
 
-Do **not** apply these labels to `kube-system`: the VPC CNI, kube-proxy and the Pod Identity agent
-legitimately need privileged/hostNetwork access and would be blocked. Say so in a comment.
-
-**The same file must also carry a ResourceQuota and a LimitRange.** This is the single largest
-developer-safety gap in the design without them, and it is two small objects:
-
-```yaml
----
-apiVersion: v1
-kind: ResourceQuota
-metadata:
-  name: demo-quota
-  namespace: demo
-spec:
-  hard:
-    # The NodePool spec.limits cap the CLUSTER. Nothing caps a NAMESPACE — so
-    # without this, one developer's `replicas: 200` consumes the entire pool
-    # budget and every other developer's pods sit Pending with no explanation.
-    # Sized well under the per-pool limit so the namespace hits THIS first,
-    # where the error message names the quota.
-    requests.cpu: "20"
-    requests.memory: 40Gi
-    limits.cpu: "40"
-    limits.memory: 80Gi
-    count/deployments.apps: "20"
-    # A LoadBalancer Service provisions a real, internet-facing AWS load
-    # balancer from three lines of YAML. Zero forces developers to ask.
-    services.loadbalancers: "0"
----
-apiVersion: v1
-kind: LimitRange
-metadata:
-  name: demo-limits
-  namespace: demo
-spec:
-  limits:
-    - type: Container
-      # Karpenter sizes nodes from resource REQUESTS. A pod with none looks
-      # free, so Karpenter bin-packs it and it then fights real workloads for
-      # CPU and memory on a shared node. defaultRequest makes that impossible.
-      defaultRequest: { cpu: 100m, memory: 128Mi }
-      default:        { cpu: "1",  memory: 1Gi }
-      max:            { cpu: "4",  memory: 8Gi }
-```
-
-> **Why `services.loadbalancers: "0"`.** `AmazonEKSEditPolicy` grants `services` create. A
-> `Service` of `type: LoadBalancer` in this namespace provisions an **internet-facing** load
-> balancer into the public subnets Phase 1 tags `kubernetes.io/role/elb`, which punctures ADR-1's
-> private-data-plane claim — from three lines of YAML, by a developer who did not know that is what
-> the field means. Quota it to zero and let a platform engineer raise it deliberately (Phase 9 ships
-> an internal-by-default Ingress for the supported path).
->
-> Set it to a non-zero value only alongside a documented decision about exposure.
+- The namespace already exists after `terraform apply`.
+- It enforces the `restricted` Pod Security profile, so every pod needs `runAsNonRoot`, a matching
+  `runAsUser`, `seccompProfile: RuntimeDefault` and `capabilities: {drop: ["ALL"]}`. The manifests
+  here show exactly that — copy them.
+- It has a ResourceQuota. `exceeded quota` on deploy means you hit it, not that the cluster is
+  broken. `kubectl describe quota -n demo` shows the headroom.
+- `services.loadbalancers` is quota'd to **0**. A `Service type=LoadBalancer` will be rejected;
+  that is deliberate, because it would provision a public load balancer into the public subnets.
+  Ask the platform team.
 
 ### 6.3 `deployment-arm64.yaml` — the Graviton case
 

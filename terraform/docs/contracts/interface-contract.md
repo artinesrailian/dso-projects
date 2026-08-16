@@ -67,7 +67,7 @@ terraform/                            # ← working directory; everything below 
 │   ├── network/                      # Phase 1
 │   ├── eks/                          # Phase 2
 │   ├── karpenter/                    # Phase 3 + 4 (AWS-side IAM/SQS + Helm release)
-│   └── karpenter-resources/          # Phase 5 (NodePool / EC2NodeClass CRs)
+│   └── cluster-resources/          # Phase 5 (NodePool / EC2NodeClass CRs)
 │       └── chart/                    # local Helm chart holding the Karpenter CRs
 └── examples/                         # Phase 6 — developer-facing demo manifests
     ├── namespace.yaml
@@ -194,7 +194,9 @@ constrained ones carry a `validation` block.
 | `cluster_log_retention_days` | `number` | `90` | 90 is the module default, not an AWS recommendation. Drop to `7` for a POC. |
 | `cluster_admin_principal_arns` | `list(string)` | `[]` | IAM principals granted **cluster-admin** via EKS access entries. Operators only. |
 | `developer_principal_arns` | `list(string)` | `[]` | IAM principals granted `AmazonEKSEditPolicy` **scoped to `var.developer_namespaces`** — the least-privilege path for application developers. Prefer SSO role ARNs over IAM users. |
-| `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the above are scoped to. Wildcards work (`team-*`); EKS does not validate that they exist. |
+| `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the access entries are **scoped to**. Wildcards work (`team-*`); EKS does not validate they exist. |
+| `governed_namespaces` | `list(string)` | `["demo"]` | Namespaces Terraform **creates** with PSA `restricted` labels, a ResourceQuota and a LimitRange. Every non-wildcard entry in `developer_namespaces` must appear here — enforced by a precondition, because access without guardrails is the failure mode. |
+| `namespace_quota` | `object` | cpu 20 / mem 40Gi requests, 40 / 80Gi limits, 20 deployments, 0 loadbalancers | Per-namespace ResourceQuota. `services.loadbalancers = 0` stops a developer provisioning a public load balancer. |
 | **Karpenter** ||||
 | `karpenter_version` | `string` | see `reference/version-pinning.md` | Helm chart version. |
 | `karpenter_namespace` | `string` | `"kube-system"` | |
@@ -318,7 +320,7 @@ signature exactly, because a later phase is already written against it.
 | out | `namespace` | `string` |
 | out | `helm_release_name` | `string` — later phases `depends_on` this to order CR creation after the CRDs exist |
 
-### 5.4 `modules/karpenter-resources` — Phase 5
+### 5.4 `modules/cluster-resources` — Phase 5
 
 | Direction | Name | Type |
 |---|---|---|
@@ -331,8 +333,11 @@ signature exactly, because a later phase is already written against it.
 | in | `default_arch` | `string` — `arm64` or `amd64`; decides the NodePool weights |
 | in | `enable_amd64` | `bool` |
 | in | `enable_arm64` | `bool` |
+| in | `governed_namespaces` | `list(string)` |
+| in | `namespace_quota` | `object` |
 | in | `karpenter_helm_release_name` | `string` — used only as a `depends_on` edge so the CRDs exist first |
 | out | `storage_class_name` | `string` — the default `gp3` StorageClass this chart also delivers (see phase-02 §2.5b) |
+| out | `governed_namespace_names` | `list(string)` — namespaces created with PSA labels, quota and limit range |
 | out | `nodepool_names` | `list(string)` |
 | out | `ec2nodeclass_name` | `string` |
 

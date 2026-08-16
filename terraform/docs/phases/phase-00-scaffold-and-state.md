@@ -369,7 +369,7 @@ Header comment only. Something like:
 ```hcl
 # Root composition. Module blocks only — no resources.
 # Phase 1 adds module.network, Phase 2 module.eks, Phases 3-4 module.karpenter,
-# Phase 5 module.karpenter_resources.
+# Phase 5 module.cluster_resources.
 ```
 
 ### 0.10 `Makefile` — the operator's entry point
@@ -447,8 +447,7 @@ verify:
 	./scripts/verify.sh
 ## demo: run the Graviton + x86 demo and report where each pod landed
 demo:
-	kubectl apply -f examples/namespace.yaml
-	kubectl apply -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml
+		kubectl apply -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml
 	kubectl wait --for=condition=available --timeout=10m deployment/web-graviton deployment/web-x86 -n demo
 	kubectl get pods -n demo -o wide
 	kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type

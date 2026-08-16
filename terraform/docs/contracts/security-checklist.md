@@ -50,6 +50,8 @@ is here. That boundary is stated in `00-architecture-and-decisions.md` §6.
 | **S-25** | Workload AWS access uses Pod Identity, never static keys | `eks-pod-identity-agent` add-on installed; EBS CSI driver via `pod_identity_association` with an `sts:AssumeRole` **and** `sts:TagSession` trust policy |
 | **S-26** | Cluster admin is granted only to the creating identity plus an explicit allowlist | `enable_cluster_creator_admin_permissions` + `var.admin_principal_arns` |
 | **S-28** | Developers get namespace-scoped access, not cluster-admin | `developer_principal_arns` → `AmazonEKSEditPolicy` with `access_scope.type = "namespace"`. Cluster-admin is reserved for `cluster_admin_principal_arns`. |
+| **S-28a** | Access and guardrails are created by the **same** `terraform apply`, and cannot drift apart | The namespace, its PSA labels, its ResourceQuota and its LimitRange are Terraform-managed (`modules/cluster-resources`), not a manual `kubectl apply`. A precondition fails the plan if any non-wildcard `developer_namespaces` entry is missing from `governed_namespaces` — i.e. Terraform refuses to grant access to an ungoverned namespace. |
+| **S-28b** | One developer cannot consume the cluster, or expose it | Per-namespace `ResourceQuota` (cpu/memory requests and limits, deployment count) plus a `LimitRange` supplying default requests so a request-less pod cannot overcommit a shared node. `services.loadbalancers = 0` blocks self-service public load balancers. |
 | **S-27** | The **bootstrap** node role is held to the same bar as the Karpenter node role | `iam_role_attach_cni_policy = false`; ECR access via `AmazonEC2ContainerRegistryPullOnly` rather than the module's default `…ReadOnly`. This role is the more privileged of the two and is easy to forget because the module configures it for you. |
 
 ## Phase 3 — Karpenter IAM
@@ -95,7 +97,7 @@ is here. That boundary is stated in `00-architecture-and-decisions.md` §6.
 | **S-61** | Every container has resource requests and limits | Also required for Karpenter to size nodes correctly |
 | **S-62** | Images pinned by tag, pulled from public ECR | Avoids Docker Hub rate limiting through a single NAT IP |
 | **S-63** | No `hostPath`, no `hostNetwork`, no privileged containers | Reviewed |
-| **S-64** | Pod security is **enforced by the API server**, not just modelled in examples | `examples/namespace.yaml` carries `pod-security.kubernetes.io/enforce: restricted`, `enforce-version: v1.36`, plus `audit`/`warn`. In-tree Pod Security Admission: two labels, no controller, no cost. `kube-system` stays `privileged` because the CNI and Pod Identity agents require it. |
+| **S-64** | Pod security is **enforced by the API server, and created by Terraform** — not modelled in an example a human has to remember to apply | `modules/cluster-resources` creates every `governed_namespaces` entry with `pod-security.kubernetes.io/enforce: restricted`, `enforce-version: v1.36`, plus `audit`/`warn`. In-tree Pod Security Admission: no controller, no cost. Terraform-managed, so a later apply restores the labels if they are stripped. `kube-system` stays `privileged` — the CNI and Pod Identity agents require it. |
 
 ## Phase 7 — Documentation
 

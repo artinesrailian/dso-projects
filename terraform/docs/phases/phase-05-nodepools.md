@@ -1,7 +1,7 @@
 # Phase 5 — NodePools and EC2NodeClass (x86 + Graviton, Spot + On-Demand)
 
 **Depends on:** Phase 4.
-**Produces:** `modules/karpenter-resources/`, wired into `main.tf`.
+**Produces:** `modules/cluster-resources/`, wired into `main.tf`.
 
 ---
 
@@ -31,16 +31,17 @@ instance to appear within about a minute.
 ## Files to create
 
 ```
-modules/karpenter-resources/versions.tf
-modules/karpenter-resources/variables.tf
-modules/karpenter-resources/main.tf
-modules/karpenter-resources/outputs.tf
-modules/karpenter-resources/README.md
-modules/karpenter-resources/chart/Chart.yaml
-modules/karpenter-resources/chart/values.yaml
-modules/karpenter-resources/chart/templates/ec2nodeclass.yaml
-modules/karpenter-resources/chart/templates/nodepools.yaml
-modules/karpenter-resources/chart/templates/storageclass.yaml
+modules/cluster-resources/versions.tf
+modules/cluster-resources/variables.tf
+modules/cluster-resources/main.tf
+modules/cluster-resources/outputs.tf
+modules/cluster-resources/README.md
+modules/cluster-resources/chart/Chart.yaml
+modules/cluster-resources/chart/values.yaml
+modules/cluster-resources/chart/templates/ec2nodeclass.yaml
+modules/cluster-resources/chart/templates/nodepools.yaml
+modules/cluster-resources/chart/templates/storageclass.yaml
+modules/cluster-resources/chart/templates/namespaces.yaml
 ```
 
 ---
@@ -58,8 +59,8 @@ Per ADR-7. Restated because it determines the whole file layout:
 | **`helm_release` on a local chart** | **Chosen.** No extra provider, `depends_on` gives correct ordering, and `helm uninstall` removes the CRs cleanly on destroy — which matters, because orphaned NodePools with finalizers are a classic destroy hang. |
 
 ```hcl
-resource "helm_release" "karpenter_resources" {
-  name      = "karpenter-resources"
+resource "helm_release" "cluster_resources" {
+  name      = "cluster-resources"
   chart     = "${path.module}/chart"
   namespace = var.namespace
 
@@ -179,13 +180,85 @@ Phase 2 specifies a default `gp3` StorageClass and hands delivery to this chart,
 only Helm-delivered path for cluster-scoped objects in the stack (there is no `kubernetes` provider —
 ADR-6). Copy it verbatim from phase-02 §2.5b.
 
-The module is named `karpenter-resources` and this is not a Karpenter resource. That is a small
+The module is named `cluster-resources` and this is not a Karpenter resource. That is a small
 naming compromise, taken deliberately rather than adding a second provider or a second module for a
 single object. Say so in a comment at the top of the template.
 
 The one field not to change: `volumeBindingMode: WaitForFirstConsumer`. With Karpenter, `Immediate`
 binding provisions the volume before the node exists, in an AZ Karpenter may not choose, and the pod
 then never schedules.
+
+### 5.3c Governed namespaces — the guardrails must be Terraform-created
+
+**This is the fix for an ordering bug, so understand why before you write it.**
+
+Phase 2 creates the developer access entries in Terraform: after `terraform apply`, every principal
+in `developer_principal_arns` holds `AmazonEKSEditPolicy` on the namespaces in
+`developer_namespaces`. If the namespace, its Pod Security labels and its ResourceQuota are a
+`kubectl apply` a human is supposed to remember, then **Terraform hands out access to a namespace
+whose guardrails may not exist** — and nothing reconciles them afterwards. An operator doing
+`kubectl create namespace demo` by hand produces an unlabelled, unquota'd namespace that developers
+already have edit rights on.
+
+So the namespace and everything governing it are created *here*, by Terraform, through the same
+chart as the StorageClass:
+
+```yaml
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    # In-tree Pod Security Admission. Terraform-managed, so `helm upgrade` on the
+    # next apply restores these if anyone strips them.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: { name: {{ . }}-quota, namespace: {{ . }} }
+spec:
+  hard:
+    requests.cpu: {{ $.Values.namespaceQuota.requestsCpu | quote }}
+    requests.memory: {{ $.Values.namespaceQuota.requestsMemory | quote }}
+    limits.cpu: {{ $.Values.namespaceQuota.limitsCpu | quote }}
+    limits.memory: {{ $.Values.namespaceQuota.limitsMemory | quote }}
+    count/deployments.apps: {{ $.Values.namespaceQuota.maxDeployments | quote }}
+    services.loadbalancers: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata: { name: {{ . }}-limits, namespace: {{ . }} }
+spec:
+  limits:
+    - type: Container
+      defaultRequest: { cpu: 100m, memory: 128Mi }
+      default:        { cpu: "1",  memory: 1Gi }
+      max:            { cpu: "4",  memory: 8Gi }
+{{- end }}
+```
+
+**Add a precondition tying the two lists together**, because the whole point is that access and
+governance cannot drift apart:
+
+```hcl
+lifecycle {
+  precondition {
+    # Every concrete namespace developers are granted access to must also be
+    # governed. Wildcards (team-*) cannot be created, so they are excluded from
+    # the check and must be governed by adding their real names here.
+    condition = length(setsubtract(
+      [for ns in var.developer_namespaces : ns if !strcontains(ns, "*")],
+      var.governed_namespaces,
+    )) == 0
+    error_message = "Every non-wildcard entry in developer_namespaces must appear in governed_namespaces, or developers get edit rights on an ungoverned namespace."
+  }
+}
+```
 
 ### 5.4 What NOT to put in the pools
 
@@ -231,7 +304,7 @@ Without credentials:
 terraform fmt -check -recursive
 terraform validate
 
-cd modules/karpenter-resources
+cd modules/cluster-resources
 helm lint ./chart --set clusterName=test --set nodeIamRoleName=test-role
 
 # Render and eyeball the output — this catches most of the §8 footguns.
@@ -267,25 +340,15 @@ kubectl describe nodepool arm64 | tail -20   # Status must NOT report subnet/SG 
 
 # --- The actual proof -----------------------------------------------------
 #
-# SELF-CONTAINED ON PURPOSE. examples/namespace.yaml is a PHASE 6 artifact and
-# this phase only depends on Phase 4, so it does not exist yet — the namespace
-# is created inline here, WITH the Pod Security Admission labels.
-#
-# Do NOT substitute `kubectl create namespace demo`. That produces an
-# UNLABELLED namespace, which silently disables the control S-64 calls
-# API-server-enforced. If a pod below is rejected, fix the POD, not the
-# namespace.
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: demo
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: v1.36
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-EOF
+# The `demo` namespace already exists — THIS module created it (§5.3c) with its
+# PSA labels, ResourceQuota and LimitRange. Confirm, do not create:
+kubectl get ns demo -o jsonpath='{.metadata.labels}' | grep -q restricted \
+  && echo "PASS: governed namespace exists" || echo "FAIL: namespace missing or unlabelled"
+kubectl describe quota -n demo
+
+# Do NOT run `kubectl create namespace demo`. That produces an UNLABELLED,
+# unquota'd namespace and silently disables the control S-64 calls
+# API-server-enforced. If a pod below is rejected, fix the POD, not the namespace.
 
 # The `restricted` profile rejects any pod without this securityContext, and
 # busybox runs as root by default — hence runAsUser. A bare `kubectl run` with
@@ -402,7 +465,7 @@ Read these files first, in this order:
   5. docs/phases/phase-05-nodepools.md           (your specification)
   6. docs/phases/phase-04-karpenter-helm.md      (read its Completion report only)
 
-Implement modules/karpenter-resources/ (a local Helm chart plus a helm_release that
+Implement modules/cluster-resources/ (a local Helm chart plus a helm_release that
 installs it) exactly as phase-05 specifies, then wire it into main.tf.
 
 Critical constraints:
