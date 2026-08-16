@@ -82,17 +82,37 @@ laptop hangs with no useful error.
   authentication_mode                      = "API"
   enable_cluster_creator_admin_permissions = true   # DEFAULTS TO FALSE — you will be locked out
 
-  access_entries = {
-    for arn in var.admin_principal_arns : basename(arn) => {
-      principal_arn = arn
-      policy_associations = {
-        admin = {
-          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-          access_scope = { type = "cluster" }
+  access_entries = merge(
+    # Operators: full cluster admin.
+    {
+      for arn in var.admin_principal_arns : "admin-${basename(arn)}" => {
+        principal_arn = arn
+        policy_associations = {
+          admin = {
+            policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+            access_scope = { type = "cluster" }
+          }
         }
       }
-    }
-  }
+    },
+    # Developers: edit rights, scoped to their namespaces only.
+    # This is the platform's whole point — a developer can deploy without an
+    # operator, and without cluster-admin.
+    {
+      for arn in var.developer_principal_arns : "dev-${basename(arn)}" => {
+        principal_arn = arn
+        policy_associations = {
+          edit = {
+            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
+            access_scope = {
+              type       = "namespace"
+              namespaces = var.developer_namespaces
+            }
+          }
+        }
+      }
+    },
+  )
 ```
 
 `"API"` disables the legacy `aws-auth` ConfigMap path entirely. `manage_aws_auth_configmap` does not
@@ -110,6 +130,23 @@ exist in v21 — if you find yourself reaching for it, you are reading v20 docum
 `enable_cluster_creator_admin_permissions = true` is not optional in practice: without it the IAM
 identity that ran `terraform apply` has zero Kubernetes RBAC and the very first `kubectl get nodes`
 returns *"error: You must be logged in to the server (Unauthorized)"*.
+
+**On the developer entries.** EKS supports scoping an access policy to specific namespaces
+(`type = "namespace"`, with wildcards like `team-*` allowed; EKS does not verify the namespaces
+exist). The four policies are `AmazonEKSViewPolicy`, `AmazonEKSEditPolicy`, `AmazonEKSAdminPolicy`
+and `AmazonEKSClusterAdminPolicy`. Handing every developer cluster-admin is the default failure mode
+of a POC and is worth avoiding in two lines of HCL.
+
+Two behaviours to document rather than field as bug reports later:
+
+- `kubectl auth can-i --list` reports **nothing** granted via access policies — it only reflects
+  Kubernetes `Role`/`ClusterRole` bindings. The access works; the introspection command cannot see it.
+- Access policies bound the *scope*, not privilege escalation *within* that scope. A developer with
+  edit rights in a namespace can still create a pod there. Namespace scoping limits blast radius; it
+  is not a sandbox for a hostile user.
+
+Access entries of type `EC2_LINUX` (the Karpenter node role, Phase 3) **cannot** take an access
+policy — AWS grants those the permissions they need automatically. Only `STANDARD` entries can.
 
 ### 2.3 Encryption and logging
 
@@ -151,8 +188,54 @@ Note on `encryption_config`: in v21, passing `null` **disables** the custom CMK.
 > or a `KMS_KEY_NOT_FOUND` / `KMS_GRANT_REVOKED` occurs, *"your cluster will not be recoverable."*
 >
 > This build keeps the CMK on (the assessment rewards demonstrating the control) with a 30-day
-> deletion window and rotation enabled. Mitigations to note in the README: least-privilege IAM on
-> key operations, and a CloudWatch alarm on key state changes.
+> deletion window and rotation enabled — **and it builds the alarm, rather than recommending one.**
+
+Because that availability risk is real, this phase creates the stack's **only detection mechanism**.
+KMS publishes no "key disabled" metric, so the trigger is a CloudTrail event via EventBridge:
+
+```hcl
+resource "aws_sns_topic" "alerts" {
+  name              = "${var.name}-alerts"
+  kms_master_key_id = "alias/aws/sns"
+}
+
+resource "aws_sns_topic_subscription" "alerts_email" {
+  count     = var.alert_email != "" ? 1 : 0
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email   # confirm the subscription from your inbox, or it is silent
+}
+
+# Disabling or scheduling deletion of the cluster CMK degrades the cluster
+# immediately and, if the deletion completes, makes it UNRECOVERABLE. This is
+# the one failure in the design with no rollback, so it gets the one alarm.
+resource "aws_cloudwatch_event_rule" "kms_key_danger" {
+  name        = "${var.name}-kms-key-danger"
+  description = "EKS CMK disabled or scheduled for deletion"
+  event_pattern = jsonencode({
+    source        = ["aws.kms"]
+    "detail-type" = ["AWS API Call via CloudTrail"]
+    detail = {
+      eventSource = ["kms.amazonaws.com"]
+      eventName   = ["DisableKey", "ScheduleKeyDeletion", "DisableKeyRotation"]
+      requestParameters = { keyId = [module.eks.kms_key_id, module.eks.kms_key_arn] }
+    }
+  })
+}
+
+resource "aws_cloudwatch_event_target" "kms_key_danger" {
+  rule      = aws_cloudwatch_event_rule.kms_key_danger.name
+  target_id = "sns"
+  arn       = aws_sns_topic.alerts.arn
+}
+```
+
+The SNS topic policy must allow `events.amazonaws.com` to publish. Note this depends on CloudTrail
+being enabled in the account — **verify that**, and if it is not, say so in your completion report
+rather than shipping an alarm that can never fire.
+
+Do not expand this into a general alerting stack; §6 scopes that out deliberately. This is one
+alarm, for the one unrecoverable failure.
 
 Audit logs are the expensive one and the one auditors ask for. All five types are on by default per
 interface-contract §3; retention is 90 days — note that 90 is the *module's* default, not an AWS
@@ -322,14 +405,65 @@ resource "aws_iam_role_policy_attachment" "ebs_csi" {
   # alternatives to AmazonEBSCSIDriverPolicy". The cluster-scoped one was extended
   # in May 2026 to honour the eks:eks-cluster-name tag "including open source
   # Karpenter", so it works with Karpenter-launched nodes.
-  # PREFER the cluster-scoped policy. Verify the exact ARN exists before using it:
+  # AWS's current documentation uses V2 in every example, so prefer it.
+  # Verify the ARN before applying:
   #   aws iam list-policies --scope AWS --query "Policies[?contains(PolicyName,'EBSCSIDriver')].[PolicyName,Arn]" --output table
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicyV2"
 }
 ```
 
 Omitting `sts:TagSession` is a common error: the association is created successfully and then every
 credential fetch fails at runtime.
+
+### 2.5b There is no default StorageClass — and that is a trap
+
+Installing the EBS CSI driver makes persistent volumes *look* supported. They are not, yet: **EKS
+does not create a default StorageClass.** A developer who writes a normal PVC —
+
+```yaml
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: { requests: { storage: 10Gi } }   # no storageClassName
+```
+
+— gets a PVC that sits `Pending` forever with `no persistent volumes available for this claim and no
+storage class is set`, and a pod stuck `Pending` behind it. There is no error at apply time and
+nothing in the cluster explains it. This is the classic "looks supported but silently isn't" gap.
+
+Ship a default `gp3` StorageClass:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer   # REQUIRED with Karpenter: bind the volume
+                                          # only once a pod is scheduled, so the volume
+                                          # lands in the AZ Karpenter picked. Immediate
+                                          # binding creates volumes in the wrong AZ and
+                                          # the pod can never schedule.
+allowVolumeExpansion: true
+reclaimPolicy: Delete                     # POC. Use Retain where data matters.
+parameters:
+  type: gp3
+  encrypted: "true"                       # matches S-24/S-50: everything encrypted at rest
+```
+
+`volumeBindingMode: WaitForFirstConsumer` is the load-bearing line. With `Immediate` (the default),
+the volume is provisioned in some AZ before scheduling, and Karpenter — which is free to launch the
+node anywhere — routinely picks a different one. The pod then cannot start, and the error blames
+node affinity rather than the StorageClass.
+
+**Delivery:** this stack has no `kubernetes` provider (ADR-6), so it goes into the local Helm chart
+that Phase 5 already uses for cluster-scoped objects. Note it in your completion report so the
+Phase 5 agent adds it; do not create a second provider to solve one object.
+
+If you would rather not support persistent storage at all in this POC, that is a legitimate choice —
+but then **remove the EBS CSI driver add-on**, so nothing implies PVCs work. Do not leave the driver
+installed with no StorageClass.
 
 ### 2.6 The bootstrap managed node group
 
@@ -402,6 +536,27 @@ tolerate it:
 
 Verification is one command, in the acceptance criteria below. If anything is stuck `Pending`,
 either add the toleration to that component or set `taint_bootstrap_nodes = false` and say so.
+
+**The taint is a scheduling convention, not a security boundary.** `AmazonEKSEditPolicy` lets any
+developer write an arbitrary pod spec, and two lines —
+`tolerations: [{key: CriticalAddonsOnly, operator: Exists}]`, widely copy-pasted from tutorials —
+put their workload next to the Karpenter controller and CoreDNS on the On-Demand bootstrap nodes.
+Nothing enforces the separation. Say this in the README rather than describing the taint as though
+it isolates anything.
+
+> **The bootstrap group is a fixed-size capacity dead end, and Karpenter is its first casualty.**
+> It runs `min 2 / max 3`, Karpenter cannot grow it (it does not manage this node group and will not
+> launch capacity for itself), and there is no autoscaler attached to it. So as system components
+> accumulate — Karpenter at 1 CPU / 1Gi, CoreDNS, the EBS CSI controller, plus anything Phase 9/10
+> adds with a `CriticalAddonsOnly` toleration — the two `t4g.medium` nodes (2 vCPU / 4 GiB each)
+> fill up. The first symptom is a Karpenter replica going `Pending`, which then means nothing else
+> in the cluster scales either.
+>
+> Mitigations, in order: keep the taint on so only system components land here; raise
+> `bootstrap_node_instance_types` to `t4g.large` before adding controllers; and if you add Phase 9
+> or 10, re-check headroom with `kubectl top nodes` and `kubectl describe node`. Record the decision
+> in the README's Operations section — an operator who does not know this will debug it as a
+> Karpenter bug.
 
 > **`desired_size` is ignored by this module — by design.** The module puts `desired_size` in a
 > `lifecycle { ignore_changes }` so that autoscalers can move it without Terraform fighting them.
@@ -535,18 +690,18 @@ aws eks describe-cluster --name "$CLUSTER" \
 ```text
 Implement Phase 2 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.

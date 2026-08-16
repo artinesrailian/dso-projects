@@ -231,7 +231,13 @@ Both pools deliberately list *families and generations* rather than named instan
 type list is the number-one cause of "Karpenter can't find capacity".
 
 Each pool carries a vCPU and memory `limits` value to cap the blast radius of a runaway deployment,
-and disruption budgets cap how much of the fleet consolidation may churn at once.
+and disruption budgets cap how much of the fleet **consolidation and drift** may churn at once.
+
+Be precise about that scope: budgets throttle `Underutilized`, `Empty` and `Drifted` only. **Node
+expiration and Spot interruption are not throttled by any budget** — see
+`reference/karpenter-api-reference.md` §3. On a Spot-first cluster that is the honest position:
+availability under interruption comes from PodDisruptionBudgets and replica spread in the workload,
+not from anything Karpenter throttles.
 
 Note that Karpenter's `spec.limits` is **per NodePool, not cluster-wide** — there is no cluster-level
 limit in the API. With both pools enabled at `nodepool_cpu_limit = 100`, the true ceiling is

@@ -58,17 +58,29 @@ Follow this outline. Prose in a couple of sentences per section, then a command 
  amd64 + arm64 NodePools, Spot + On-Demand, Pod Identity, encrypted everything]
 
 ## Prerequisites
-[the table from 00-architecture-and-decisions §4 — including the vCPU quota
- warning and the Spot service-linked role, both with copy-pasteable commands]
+[3-4 bullets only: AWS creds, the Spot service-linked role, the vCPU quota
+ warning, required tooling. One line each with the check command.
+ Link to docs/operator-runbook.md §1 for the full treatment — do NOT
+ reproduce the §4 table.]
 
 ## Quick start
-[bootstrap state -> configure -> init -> apply -> update-kubeconfig, ~6 commands]
+[the make targets: bootstrap -> configure -> init -> apply -> kubeconfig.
+ ~6 lines. Then one sentence: "To bring it up in stages, or for the full
+ platform-engineer runbook, see docs/operator-runbook.md."]
 
 ## ── FOR DEVELOPERS ──────────────────────────────
 ## Running a pod on Graviton or x86
 [THE SECTION THE ASSIGNMENT ASKS FOR. See below.]
 
-## ── FOR OPERATORS ───────────────────────────────
+## ── FOR PLATFORM ENGINEERS ──────────────────────
+## Operating this cluster
+[~6 lines, then LINK OUT. docs/operator-runbook.md is the real document and
+ already covers: credentials (SSO > assume-role > keys, and why not keys),
+ what the deploy principal needs, the state backend's three options, staged
+ bring-up with per-stage cost and verification gates, granting developers
+ namespace-scoped access, upgrades, and ordered teardown.
+ The README says what exists and links; it does not duplicate.]
+
 ## Configuration
 [the ~8 variables a user actually sets, not all 30. Link to
  docs/contracts/interface-contract.md §3 for the full table.
@@ -226,18 +238,18 @@ you had to guess at is a defect. List them in the completion report.
 ```text
 Implement Phase 7 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.

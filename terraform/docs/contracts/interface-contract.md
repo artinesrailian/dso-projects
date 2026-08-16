@@ -175,8 +175,9 @@ constrained ones carry a `validation` block.
 | `additional_tags` | `map(string)` | `{}` | Merged over the base tag set. |
 | **Cost controls** ||||
 | `enable_budget_alarm` | `bool` | `true` | Creates an AWS Budget scoped to this stack's tags. The only automated guard against a forgotten cluster. |
-| `monthly_budget_usd` | `number` | `300` | Sized against the default configuration in `00-architecture-and-decisions.md` §5. |
+| `monthly_budget_usd` | `number` | `450` | Must sit clearly ABOVE the idle band (~$255–295 at defaults including log ingest), or the 80% alert fires every normal month and gets muted. Raise it, do not lower it, if you enable VPC endpoints (+$263). |
 | `budget_notification_email` | `string` | `""` | Required when `enable_budget_alarm` is true. Alerts at 80% actual and 100% forecast. |
+| `alert_email` | `string` | `""` | Subscribed to the SNS topic that receives the KMS-key-danger alarm (Phase 2). Empty = no subscriber, i.e. the alarm is silent. |
 | **Networking** ||||
 | `vpc_cidr` | `string` | `"10.0.0.0/16"` | Must be **/18 or larger**. At /20 the computed intra subnets are /28 — 11 usable IPs — and AWS requires ≥6 per cluster subnet while *recommending* ≥16. /18 yields /26 intra subnets (59 usable). |
 | `az_count` | `number` | `3` | `2`–`3`. Drives subnet slicing. |
@@ -191,7 +192,9 @@ constrained ones carry a `validation` block.
 | `cluster_endpoint_private_access` | `bool` | `true` | Always on. |
 | `cluster_enabled_log_types` | `list(string)` | `["api","audit","authenticator","controllerManager","scheduler"]` | |
 | `cluster_log_retention_days` | `number` | `90` | 90 is the module default, not an AWS recommendation. Drop to `7` for a POC. |
-| `cluster_admin_principal_arns` | `list(string)` | `[]` | Extra IAM principals granted cluster admin via EKS access entries. |
+| `cluster_admin_principal_arns` | `list(string)` | `[]` | IAM principals granted **cluster-admin** via EKS access entries. Operators only. |
+| `developer_principal_arns` | `list(string)` | `[]` | IAM principals granted `AmazonEKSEditPolicy` **scoped to `var.developer_namespaces`** — the least-privilege path for application developers. Prefer SSO role ARNs over IAM users. |
+| `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the above are scoped to. Wildcards work (`team-*`); EKS does not validate that they exist. |
 | **Karpenter** ||||
 | `karpenter_version` | `string` | see `reference/version-pinning.md` | Helm chart version. |
 | `karpenter_namespace` | `string` | `"kube-system"` | |
@@ -329,6 +332,7 @@ signature exactly, because a later phase is already written against it.
 | in | `enable_amd64` | `bool` |
 | in | `enable_arm64` | `bool` |
 | in | `karpenter_helm_release_name` | `string` — used only as a `depends_on` edge so the CRDs exist first |
+| out | `storage_class_name` | `string` — the default `gp3` StorageClass this chart also delivers (see phase-02 §2.5b) |
 | out | `nodepool_names` | `list(string)` |
 | out | `ec2nodeclass_name` | `string` |
 

@@ -40,6 +40,7 @@ modules/karpenter-resources/chart/Chart.yaml
 modules/karpenter-resources/chart/values.yaml
 modules/karpenter-resources/chart/templates/ec2nodeclass.yaml
 modules/karpenter-resources/chart/templates/nodepools.yaml
+modules/karpenter-resources/chart/templates/storageclass.yaml
 ```
 
 ---
@@ -172,6 +173,20 @@ capacity reservations, so it is simply not listed.
 **`disruption` must set both `consolidationPolicy` and `consolidateAfter`** — G-17. And every pool
 must carry `limits`.
 
+### 5.3b The default StorageClass
+
+Phase 2 specifies a default `gp3` StorageClass and hands delivery to this chart, because this is the
+only Helm-delivered path for cluster-scoped objects in the stack (there is no `kubernetes` provider —
+ADR-6). Copy it verbatim from phase-02 §2.5b.
+
+The module is named `karpenter-resources` and this is not a Karpenter resource. That is a small
+naming compromise, taken deliberately rather than adding a second provider or a second module for a
+single object. Say so in a comment at the top of the template.
+
+The one field not to change: `volumeBindingMode: WaitForFirstConsumer`. With Karpenter, `Immediate`
+binding provisions the volume before the node exists, in an AZ Karpenter may not choose, and the pod
+then never schedules.
+
 ### 5.4 What NOT to put in the pools
 
 - **`Balanced`** as a `consolidationPolicy`. The enum value exists but is undocumented in 1.14.0.
@@ -251,11 +266,52 @@ kubectl get nodepools -o wide     # amd64, arm64
 kubectl describe nodepool arm64 | tail -20   # Status must NOT report subnet/SG discovery errors
 
 # --- The actual proof -----------------------------------------------------
-kubectl create namespace demo
+#
+# SELF-CONTAINED ON PURPOSE. examples/namespace.yaml is a PHASE 6 artifact and
+# this phase only depends on Phase 4, so it does not exist yet — the namespace
+# is created inline here, WITH the Pod Security Admission labels.
+#
+# Do NOT substitute `kubectl create namespace demo`. That produces an
+# UNLABELLED namespace, which silently disables the control S-64 calls
+# API-server-enforced. If a pod below is rejected, fix the POD, not the
+# namespace.
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: demo
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+EOF
 
-kubectl run graviton-test --image=public.ecr.aws/docker/library/busybox:latest \
-  --namespace demo --restart=Never --overrides='
-{"spec":{"nodeSelector":{"kubernetes.io/arch":"arm64"}}}' -- sleep 3600
+# The `restricted` profile rejects any pod without this securityContext, and
+# busybox runs as root by default — hence runAsUser. A bare `kubectl run` with
+# only a nodeSelector WILL be rejected with
+#   violates PodSecurity "restricted:v1.36"
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata: { name: graviton-test, namespace: demo }
+spec:
+  restartPolicy: Never
+  nodeSelector: { kubernetes.io/arch: arm64 }
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: t
+      image: public.ecr.aws/docker/library/busybox:latest
+      command: ["sleep", "3600"]
+      resources:
+        requests: { cpu: 500m, memory: 128Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+EOF
 
 # Watch a Graviton node appear (typically 40-70s)
 kubectl get nodeclaims -w      # ctrl-c once Ready
@@ -263,9 +319,28 @@ kubectl get nodeclaims -w      # ctrl-c once Ready
 kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type
 # Expect a new node: arm64, spot (usually), an m7g/c7g/r7g-class type
 
-kubectl run x86-test --image=public.ecr.aws/docker/library/busybox:latest \
-  --namespace demo --restart=Never --overrides='
-{"spec":{"nodeSelector":{"kubernetes.io/arch":"amd64"}}}' -- sleep 3600
+# Same again for x86 — only the nodeSelector and the name change.
+kubectl apply -f - <<'EOF'
+apiVersion: v1
+kind: Pod
+metadata: { name: x86-test, namespace: demo }
+spec:
+  restartPolicy: Never
+  nodeSelector: { kubernetes.io/arch: amd64 }
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 65534
+    seccompProfile: { type: RuntimeDefault }
+  containers:
+    - name: t
+      image: public.ecr.aws/docker/library/busybox:latest
+      command: ["sleep", "3600"]
+      resources:
+        requests: { cpu: 500m, memory: 128Mi }
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
+EOF
 kubectl get nodes -L kubernetes.io/arch   # now both architectures present
 
 # --- Consolidation works too ----------------------------------------------
@@ -301,18 +376,18 @@ SLR) and G-13 (discovery tags) cover nearly every real case.
 ```text
 Implement Phase 5 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.

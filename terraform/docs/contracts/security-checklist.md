@@ -21,6 +21,7 @@ is here. That boundary is stated in `00-architecture-and-decisions.md` §6.
 | ID | Requirement | Implemented by |
 |---|---|---|
 | **S-01** | Terraform state bucket is versioned, encrypted with a customer-managed KMS key with rotation, has all four public-access blocks, ACLs disabled, and a bucket policy denying non-TLS requests | `bootstrap/main.tf` |
+| **S-00** | The operator authenticates with short-lived credentials | IAM Identity Center (SSO) or an assumed role. **No IAM user with long-lived access keys**, and no AWS credentials in any variable, tfvars or repository secret — the provider uses the standard credential chain. CI uses OIDC federation (Phase 11). See `operator-runbook.md` §1.1. |
 | **S-02** | No secrets in committed files | `terraform/.gitignore` covers `*.tfvars` (except `*.example`) and `backend.hcl`; the bucket name is supplied via partial backend config, not committed |
 | **S-03** | Every provider and module pinned; `.terraform.lock.hcl` committed | `versions.tf` uses `~>` for providers and exact versions for modules |
 | **S-04** | `0.0.0.0/0` on the API endpoint is impossible, enforced by code rather than convention | `validation` block on `cluster_endpoint_public_access_cidrs` |
@@ -42,11 +43,13 @@ is here. That boundary is stated in `00-architecture-and-decisions.md` §6.
 |---|---|---|
 | **S-20** | Authentication uses EKS access entries; the legacy aws-auth path is off | `authentication_mode = "API"` (note: a one-way door, chosen at create time) |
 | **S-21** | Kubernetes API data envelope-encrypted with a customer-managed key with rotation | `create_kms_key = true` + `encryption_config = { resources = ["secrets"] }`. *Baseline encryption with an AWS-owned key exists by default since k8s 1.28; the CMK adds controllable policy/rotation/audit at the cost of an availability risk — see the Phase 2 note.* |
+| **S-29** | The one unrecoverable failure has an actual detector | EventBridge rule on CloudTrail `DisableKey`/`ScheduleKeyDeletion` for the cluster CMK → SNS → email. Requires CloudTrail enabled in the account, and a **confirmed** SNS subscription. |
 | **S-22** | All five control-plane log types enabled with explicit retention | `enabled_log_types` = api, audit, authenticator, controllerManager, scheduler; `cloudwatch_log_group_retention_in_days` |
 | **S-23** | Public endpoint disabled, or restricted to an explicit allowlist | `endpoint_public_access_cidrs`, guarded by S-04 |
 | **S-24** | Managed node group volumes encrypted; IMDSv2 required with hop limit 1 | `block_device_mappings.ebs.encrypted = true`; `metadata_options.http_tokens = "required"`, `http_put_response_hop_limit = 1` |
 | **S-25** | Workload AWS access uses Pod Identity, never static keys | `eks-pod-identity-agent` add-on installed; EBS CSI driver via `pod_identity_association` with an `sts:AssumeRole` **and** `sts:TagSession` trust policy |
 | **S-26** | Cluster admin is granted only to the creating identity plus an explicit allowlist | `enable_cluster_creator_admin_permissions` + `var.admin_principal_arns` |
+| **S-28** | Developers get namespace-scoped access, not cluster-admin | `developer_principal_arns` → `AmazonEKSEditPolicy` with `access_scope.type = "namespace"`. Cluster-admin is reserved for `cluster_admin_principal_arns`. |
 | **S-27** | The **bootstrap** node role is held to the same bar as the Karpenter node role | `iam_role_attach_cni_policy = false`; ECR access via `AmazonEC2ContainerRegistryPullOnly` rather than the module's default `…ReadOnly`. This role is the more privileged of the two and is easy to forget because the module configures it for you. |
 
 ## Phase 3 — Karpenter IAM
@@ -55,7 +58,7 @@ is here. That boundary is stated in `00-architecture-and-decisions.md` §6.
 |---|---|---|
 | **S-30** | Karpenter controller credentials come from Pod Identity | `create_pod_identity_association = true`; no IRSA, no static keys |
 | **S-31** | `iam:PassRole` cannot be used to escalate | Scoped to the single node role ARN with `iam:PassedToService = ec2.amazonaws.com` |
-| **S-32** | Karpenter node role carries only the necessary managed policies, and **not** `AmazonEKS_CNI_Policy` | `AmazonEKSWorkerNodePolicy`, `AmazonEC2ContainerRegistryPullOnly` (the tighter replacement for `…ReadOnly`), `AmazonSSMManagedInstanceCore`. Set `node_iam_role_attach_cni_policy = false` and give the `vpc-cni` add-on its own Pod Identity role instead — otherwise every node role carries ENI and IP-manipulation rights that any `hostNetwork` pod inherits, which contradicts the least-privilege claim. |
+| **S-32** | Karpenter node role carries only the necessary managed policies, and **not** `AmazonEKS_CNI_Policy` | `AmazonEKSWorkerNodePolicy`, `AmazonEC2ContainerRegistryPullOnly` (the tighter replacement for `…ReadOnly`), `AmazonSSMManagedInstanceCore`. Set `node_iam_role_attach_cni_policy = false` and give the `vpc-cni` add-on its own Pod Identity role instead — otherwise every node role carries ENI and IP-manipulation rights that any `hostNetwork` pod inherits, which contradicts the least-privilege claim. **Residual risk to record:** `AmazonSSMManagedInstanceCore` grants `ssm:GetParameter*` on `Resource: "*"`, so anything reaching node credentials can read every unencrypted SSM parameter in the account. Accepted here because Session Manager is the only node access path and there is no SSH key; replace with a scoped inline policy in production. |
 | **S-33** | Interruption queue encrypted, and writable only by the event services | `queue_managed_sse_enabled = true`; queue policy allows `SendMessage` only from `events.amazonaws.com` / `sqs.amazonaws.com`, with an explicit deny when `aws:SecureTransport` is false |
 | **S-34** | Exactly one node access entry, of the correct type | `create_access_entry = true`, `access_entry_type = "EC2_LINUX"` |
 
@@ -137,7 +140,7 @@ production, multi-tenant cluster.
 
 | Not done | Why | What it would take |
 |---|---|---|
-| Network policy / pod-to-pod isolation | Single-tenant POC; no hostile workloads in scope | Cilium or the VPC CNI's network policy support, plus default-deny per namespace |
+| Network policy / pod-to-pod isolation | No hostile workloads in scope. **But be precise about the residual**: the plan's own developer model is 5-20 principals sharing a namespace (`developer_principal_arns`), so "single-tenant" means one company, not one workload. Every pod can reach every other pod and all egress is unrestricted. | Cilium, or the VPC CNI's built-in network policy support, with default-deny ingress and egress per namespace |
 | Runtime threat detection | Out of scope | GuardDuty EKS Protection, or the `aws-guardduty-agent` add-on |
 | **External** policy engine (Kyverno / OPA Gatekeeper) | In-tree Pod Security Admission covers the POC's needs at zero cost — see S-64. An external engine adds mutation, custom policy and non-pod resources. | Deploy Kyverno with policies enforcing image provenance, resource limits and topology rules |
 | Image scanning and signing | No application images are built here | ECR enhanced scanning; cosign verification at admission |

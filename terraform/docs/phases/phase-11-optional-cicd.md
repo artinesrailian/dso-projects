@@ -187,12 +187,12 @@ pre-commit run --config .pre-commit-config.yaml --all-files
 ```text
 Implement Phase 11 (OPTIONAL) of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
   3. Create NOTHING at the repository root. In particular do NOT create .github/ at the root,
      even though that is where GitHub Actions workflows normally live — phase-11 §"scope

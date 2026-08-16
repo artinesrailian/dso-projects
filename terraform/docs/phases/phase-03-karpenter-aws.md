@@ -205,7 +205,7 @@ oversight — say so in the code comment.
 
 - **S-30** Controller credentials come from EKS Pod Identity. No static keys, no IRSA trust policy.
 - **S-31** `iam:PassRole` scoped to the single node role, restricted to `ec2.amazonaws.com`.
-- **S-32** Node role carries only `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`,
+- **S-32** Node role carries only `AmazonEKSWorkerNodePolicy`,
   `AmazonEC2ContainerRegistryPullOnly` (the tighter replacement for `...ReadOnly`) and
   `AmazonSSMManagedInstanceCore`.
 - **S-33** SQS queue has managed SSE enabled and a policy allowing `SendMessage` only from
@@ -282,18 +282,18 @@ aws events list-rules --query "Rules[?contains(Name,'Karpenter')].Name"
 ```text
 Implement Phase 3 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.

@@ -34,6 +34,7 @@ All paths are relative to `terraform/`, which is your working directory.
 
 ```
 .gitignore                      # scoped to terraform/, NOT the repository root
+Makefile                        # the operator entry point — see 0.10
 versions.tf
 providers.tf
 backend.tf
@@ -331,6 +332,27 @@ Add a `validation` on `budget_notification_email` requiring a non-empty value wh
 `enable_budget_alarm` is true — a budget with no subscriber is silent, which is worse than none
 because it looks like a control.
 
+**Create a second, unfiltered budget as the day-zero backstop.** The tag-filtered budget above is
+blind until cost allocation tags are activated in Billing (a manual step, up to 24h to take effect),
+which is precisely the window in which a first-time apply goes wrong. An account-scoped budget with
+no `cost_filter` covers that gap and costs nothing:
+
+```hcl
+resource "aws_budgets_budget" "account_backstop" {
+  count        = var.enable_budget_alarm ? 1 : 0
+  name         = "${local.name}-account-backstop"
+  budget_type  = "COST"
+  limit_amount = tostring(var.monthly_budget_usd * 2)
+  limit_unit   = "USD"
+  time_unit    = "MONTHLY"
+  # No cost_filter: catches spend the tag filter cannot see yet.
+  notification { ... }
+}
+```
+
+Note in the README that AWS Budgets refreshes cost data only 1–3 times a day, so neither budget is a
+real-time control. They catch a forgotten cluster, not a runaway loop.
+
 Two things to document in the README rather than pretend Terraform handles:
 
 1. **Cost allocation tags must be activated in Billing** before `Project`/`Environment` work as a
@@ -349,6 +371,108 @@ Header comment only. Something like:
 # Phase 1 adds module.network, Phase 2 module.eks, Phases 3-4 module.karpenter,
 # Phase 5 module.karpenter_resources.
 ```
+
+### 0.10 `Makefile` — the operator's entry point
+
+Every command in [`docs/operator-runbook.md`](../operator-runbook.md) is a `make` target. The
+Makefile is what turns "run these twelve commands in the right order" into something a person can
+actually follow, and it is where the **staged bring-up** lives.
+
+Write it now, in Phase 0, even though most targets reference modules that later phases create. Add a
+comment saying so. A target that fails with "module.network does not exist" until Phase 1 lands is
+fine and self-explanatory; a Makefile that appears in Phase 8 is not usable during the build.
+
+```makefile
+.DEFAULT_GOAL := help
+SHELL := /usr/bin/env bash
+TF := terraform
+
+## help: list targets
+help:
+	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/## //' | column -t -s ':'
+
+# ---------- static: no AWS credentials, no cost ----------
+## check: everything that can be verified for free
+check: fmt validate test lint
+## fmt: formatting
+fmt:
+	$(TF) fmt -check -recursive
+## validate: config validity (root and bootstrap)
+validate:
+	$(TF) init -backend=false && $(TF) validate
+	$(TF) -chdir=bootstrap init -backend=false && $(TF) -chdir=bootstrap validate
+## test: run terraform test — this is what proves the security guards actually fire
+test:
+	$(TF) test
+## lint: tflint + checkov, if installed
+lint:
+	@command -v tflint >/dev/null && tflint --recursive || echo "tflint not installed, skipping"
+	@command -v checkov >/dev/null && checkov -d . --framework terraform --compact || echo "checkov not installed, skipping"
+
+# ---------- day 0 ----------
+## bootstrap: create the S3 + KMS state backend (once per account)
+bootstrap:
+	$(TF) -chdir=bootstrap init && $(TF) -chdir=bootstrap apply
+	@echo "Now: cp backend.hcl.example backend.hcl, fill it from the outputs above, then 'make init'"
+## init: initialise with the remote backend
+init:
+	$(TF) init -backend-config=backend.hcl
+
+# ---------- day 1: staged bring-up ----------
+# -target is used deliberately for staged FIRST-TIME bring-up and for isolating
+# a failure to one layer. Terraform warns it is for exceptional circumstances —
+# this is one. `make apply` afterwards is REQUIRED to converge.
+## stage-network: VPC only (~4 min, starts the ~$99/mo NAT meter)
+stage-network:
+	$(TF) plan -target=module.network -out=tf.plan && $(TF) apply tf.plan
+## stage-cluster: + EKS control plane and bootstrap nodes (~15 min)
+stage-cluster:
+	$(TF) plan -target=module.eks -out=tf.plan && $(TF) apply tf.plan
+## stage-karpenter: + Karpenter IAM, SQS and both Helm releases (~3 min)
+stage-karpenter:
+	$(TF) plan -target=module.karpenter -out=tf.plan && $(TF) apply tf.plan
+## plan: full plan, saved to tf.plan
+plan:
+	$(TF) plan -out=tf.plan
+## apply: full apply — converges after any staged/targeted apply
+apply:
+	$(TF) plan -out=tf.plan && $(TF) apply tf.plan
+
+# ---------- verify and demo ----------
+## kubeconfig: point kubectl at the cluster
+kubeconfig:
+	@eval "$$($(TF) output -raw configure_kubectl)"
+## verify: full assertion suite (Phase 8)
+verify:
+	./scripts/verify.sh
+## demo: run the Graviton + x86 demo and report where each pod landed
+demo:
+	kubectl apply -f examples/namespace.yaml
+	kubectl apply -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml
+	kubectl wait --for=condition=available --timeout=10m deployment/web-graviton deployment/web-x86 -n demo
+	kubectl get pods -n demo -o wide
+	kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type
+## demo-clean: remove the demo workloads and let Karpenter consolidate
+demo-clean:
+	kubectl delete -f examples/ --ignore-not-found
+
+# ---------- teardown ----------
+## destroy: ORDERED teardown. Never use a bare `terraform destroy` — see gotchas G-09.
+destroy:
+	./scripts/teardown.sh
+
+.PHONY: help check fmt validate test lint bootstrap init stage-network stage-cluster \
+        stage-karpenter plan apply kubeconfig verify demo demo-clean destroy
+```
+
+Two rules for whoever writes this:
+
+1. **Every apply target goes through `plan -out` then `apply <planfile>`.** Applying a saved plan is
+   the only way to be sure you applied what you reviewed. A bare `terraform apply -auto-approve` in a
+   Makefile is how people destroy things by muscle memory.
+2. **`destroy` must call `scripts/teardown.sh`, never `terraform destroy`.** If Phase 8 has not run
+   yet, make the target fail with a message pointing at G-09 rather than silently doing the
+   dangerous thing.
 
 ### 0.9 `bootstrap/` — the state backend
 
@@ -455,18 +579,18 @@ grep -q '\.terraform\.lock\.hcl' .gitignore && echo "FAIL: lock file must NOT be
 ```text
 Implement Phase 0 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.
