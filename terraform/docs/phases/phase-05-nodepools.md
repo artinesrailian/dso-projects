@@ -728,7 +728,20 @@ and stop. Do not start Phase 6.
   mismatched name); the rationale is corrected below, `Chart.yaml`'s `name: chart` is unchanged
   since the deviation itself is harmless. (2) The `variables.tf` files-created bullet said "13
   inputs" when the file (and interface-contract §5.4's amended table) actually has 16; corrected
-  below. No blockers found.
+  below. No blockers found. **Reviewed 2026-08-17:** a second independent review re-ran
+  `terraform fmt -check -recursive`, `terraform init -backend=false`/`validate`, `helm lint`
+  (plain and `--strict`), all nine acceptance-criteria greps, the two negative-leakage greps, a
+  field-by-field diff of `variables.tf`/`outputs.tf`/`main.tf`'s wiring against
+  interface-contract.md §5.4 and root `main.tf`'s call site, and a repo-wide grep for
+  `instanceProfile`/`Balanced`/`terminationGracePeriod`/`spec.replicas` outside comments — all
+  PASS, zero code changes required. It additionally rendered `EC2NodeClass.spec.tags` with a
+  **non-empty** `tags` map (every prior render, including 2026-08-16's, used the chart's default
+  `tags: {}`, so the merge collision Deviation #2 describes had never actually been exercised) —
+  confirmed `ManagedBy: karpenter` wins over a same-keyed `ManagedBy: terraform` from the passed-in
+  map exactly as Deviation #2 claims, and `Project`/`Environment`/`Component` all reach the
+  rendered output, so S-C1/interface-contract §2.2's cost-allocation requirement genuinely holds.
+  No blockers found; one latent gap outside this phase's scope is recorded under "Notes for the
+  next phase" below rather than fixed here.
 
 - Files created/changed:
   - `modules/cluster-resources/versions.tf` — **new.** Only `helm` in `required_providers`
@@ -903,3 +916,17 @@ and stop. Do not start Phase 6.
   same precedent Phase 4 set for `helm_release_name`. If a later phase's `verify.sh` or README wants
   one of them at the root, add it to interface-contract §4 in that phase's own change rather than
   assuming it is already there.
+
+  **(Added during the 2026-08-17 review.)** Root `outputs.tf` has no `developer_rbac_group` output,
+  even though interface-contract.md §4 already lists one ("Consumed by `verify.sh`'s
+  `kubectl auth can-i --as-group` assertions") and phase-08-verification-teardown.md §D2 literally
+  reads `terraform output -raw developer_rbac_group`. This is a pre-existing gap, not one introduced
+  by this phase — Phase 5's own "Acceptance criteria" and §5.3d's `kubectl auth can-i` commands
+  hardcode `--as-group=opsfleet:developers` rather than reading the output, so nothing in this
+  phase's own verification needs it, and it was correctly out of scope to add here per the same
+  precedent phase-02's completion report set for the missing root `region` output (flagged, not
+  fixed, because it wasn't that phase's own contract section either). `var.developer_rbac_group` is
+  a plain pass-through with no module dependency, so any phase — most naturally Phase 8, when
+  `verify.sh` is actually written — can add `output "developer_rbac_group" { value =
+  var.developer_rbac_group }` to root `outputs.tf` in one line. Flagging now so Phase 8 does not
+  discover this as a surprise mid-script.
