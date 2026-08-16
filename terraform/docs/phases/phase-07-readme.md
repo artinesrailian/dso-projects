@@ -288,11 +288,161 @@ docs/phases/phase-07-readme.md and stop. Do not start Phase 8.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE. `README.md` written at the repo root, following the required structure exactly
+  (banner-delimited FOR DEVELOPERS / FOR PLATFORM ENGINEERS sections included). All four
+  acceptance-criteria checks pass: no leaked identifiers, every internal link resolves, the
+  developer-section YAML is byte-identical to the shipped `examples/deployment-arm64.yaml`
+  (diffed programmatically, not eyeballed), and the ASCII diagram's box-drawing rows are a
+  verified uniform 64 characters (built and checked with a Python script, not hand-typed —
+  a first hand-typed attempt was in fact misaligned and caught by that check, see Deviations).
+  A fresh, context-free agent then ran the actual cold-read test end to end; its findings are
+  below, and every substantive one was fixed in the README before this report was filed.
 
-- Status:
 - Files created/changed:
+  - `README.md` — new, ~469 lines including the mandatory verbatim YAML block.
+  - `docs/phases/phase-07-readme.md` — this completion report only.
+  - Nothing else. No edits to `terraform.tfvars.example`, `backend.tf`, `examples/*.yaml`, or any
+    other phase's deliverable — even where the cold-read test surfaced defects in those files
+    (see "Notes for the next phase").
+
 - Deviations from spec:
-- **Gaps found in the cold-read test:**
-- Verification run:
+  1. **Target length: 250–450 lines, not 150–200.** The phase doc's own "Specification" section
+     says ~150–200 lines; the direct task prompt that dispatched this phase explicitly overrode
+     that to 250–450, "depth goes in docs/, linked." Followed the direct instruction. Final length
+     is 469 — 19 lines over that band, entirely from fixes applied after the cold-read test (see
+     below); judged that correctness outweighed a hard line count once real defects were found,
+     rather than cutting fixes back in to hit a number.
+  2. **The required outline has no explicit "version table" section header**, but §"Version
+     table" (outside the numbered outline) separately mandates one with a verified date. Resolved
+     by folding a compact pinned-versions table into the end of "## What you get" rather than
+     adding a new top-level section, since the outline's own bullet list already introduces EKS
+     1.36 / Karpenter 1.14.0 there.
+  3. **First diagram draft was hand-typed and silently misaligned.** Built the ASCII diagram with
+     a Python script generating fixed-width box rows (verified: all "┌"/"│"/"└" rows exactly 64
+     Unicode codepoints), but then hand-transcribed it into the `Write` call instead of pasting
+     the verified output — introducing 1–2 character drift on several rows. Caught by re-running
+     the character-count check *after* writing the file (an `awk`-based check first gave a false
+     "192 for every row" — that was byte-count under the shell's locale, not character count; a
+     Python `len()` check on the actually-written file is what caught the real misalignment).
+     Fixed by regenerating the diagram to a scratch file and pasting its exact bytes via `Edit`,
+     then re-verifying. Lesson for whoever edits this diagram next: never hand-retype a
+     generated-and-verified block; copy the verified bytes exactly.
+  4. **Troubleshooting's fourth entry was swapped from G-01 to G-05 after the cold-read pass.**
+     The first draft listed G-01 (`enable_cluster_creator_admin_permissions` defaults `false`) as
+     a first-time-user gotcha. The cold-read agent found this misleading: that setting is not a
+     root variable in this repo at all — `modules/eks/main.tf:34` hardcodes it `true` specifically
+     to prevent G-01, so a reader hitting `Unauthorized` and searching for that variable would not
+     find it. Replaced with G-05 (Karpenter itself sticks on one replica if
+     `bootstrap_node_min_size` is dropped to `1`), which is both genuinely still live and directly
+     triggered by the POC cost-saving override this same README recommends in Configuration.
+
+- **Gaps found in the cold-read test** (a fresh, zero-context agent given only `README.md` and
+  told to walk clone→apply→demo→teardown; full transcript-quality report available on request).
+  All of the following were found by that agent; every item below **not** marked "left as-is" was
+  fixed in the README before this report was filed:
+  1. `backend.tf` has a comment pointing local-state users at "See README.md," which said nothing
+     about local state. **Fixed** — Quick start now links to `docs/operator-runbook.md` §2 Option
+     C.
+  2. Quick start's tfvars comment said "set your /32 and an alert email," but the mandatory
+     variable is `budget_notification_email`; a *different*, unrelated variable (`alert_email`,
+     empty by default) feeds the KMS-danger alarm mentioned in Known limitations. **Fixed** —
+     Quick start now names `budget_notification_email` explicitly; Configuration and Known
+     limitations both now name `alert_email` and its default.
+  3. Configuration claimed "30 total" variables; the real count (cross-checked against
+     `variables.tf` and interface-contract §3) is 46. **Fixed.**
+  4. `<cluster-name>`/`<region>` placeholders appeared twice (developer kubeconfig command,
+     Teardown step 3) with no stated way to resolve them. **Fixed** — both now point at
+     `terraform output -raw cluster_name`.
+  5. The Troubleshooting entry citing `enable_cluster_creator_admin_permissions` as a fixable
+     variable was wrong, per Deviation #4 above. **Fixed** by replacing the entry.
+  6. "What happens next, **with real command output**" directly preceded a sample table labelled
+     "illustrative — see Status above" two lines later — a self-contradiction the Status note had
+     already correctly hedged but the section header oversold. **Fixed** — header shortened to
+     "What happens next:".
+  7. "On x86: same file, one line different" is not literally true — the Deployment/PDB name and
+     every label selector also differ between `deployment-arm64.yaml` and `deployment-x86.yaml`
+     (verified by `diff`), because the two objects coexist in the same namespace. **Fixed** —
+     reworded to state the one *architectural* line changes and name the cosmetic differences
+     honestly.
+  8. Teardown instructs `kubectl delete namespace demo`, which reads as contradicting the
+     developer section's "don't create/manage this namespace yourself" guidance. **Fixed** with an
+     inline comment clarifying it's safe specifically because the whole stack is coming down next.
+  9. `job-arch-check.yaml`'s `nodeSelector` is hardcoded to `arm64`, with no README pointer to how
+     a reader would check the amd64 side. **Fixed** with a one-line pointer.
+  10. Unexplained acronyms IRSA, ITN, MNG on first use. **Fixed** for IRSA (inline) and ITN/MNG (a
+      legend line under the diagram). **Left as-is:** PSA, which appears only inside the verbatim
+      `deployment-arm64.yaml` comment block — expanding it would violate the phase spec's explicit
+      "copy it verbatim... do not retype it" instruction, since that YAML must match the shipped
+      file byte-for-byte (verified by `diff`, see Verification run).
+  11. `$EDITOR` assumed set; `make apply`'s real duration/billing-start not flagged. **Fixed** —
+      both now have inline notes.
+  12. **Left as-is, out of scope:** the verbatim YAML's own comment — "No CPU limit is set on
+      purpose... it buys nothing a request doesn't already give Karpenter" — is arguably inaccurate
+      given the `demo` namespace's LimitRange defaults a `1`-core CPU limit onto every container at
+      admission time (`modules/cluster-resources/chart/templates/namespaces.yaml`). This is a
+      pre-existing statement in Phase 6's shipped file, not something this phase's README author
+      may silently rewrite without breaking the verbatim-copy requirement or reaching outside this
+      phase's own deliverable (`README.md` only). Flagged here for whoever next touches
+      `examples/deployment-arm64.yaml`.
+  13. Overall verdict from the cold-read agent (before the fixes above were applied): the guided
+      path (`make bootstrap` → `make apply` → `make kubeconfig` → `make demo`) was already
+      self-contained; the gaps were concentrated in the manual/developer-facing commands the
+      README itself prints inline. All fixable gaps above are now closed; #12 is the one
+      documented, deliberate exception.
+
+- Verification run (all from `terraform/`, no AWS credentials used or required):
+  - `wc -l README.md` → 469.
+  - `grep -nE '[0-9]{12}' README.md`, `grep -nE 'AKIA[0-9A-Z]{16}' README.md`,
+    `grep -nE '([0-9]{1,3}\.){3}[0-9]{1,3}' README.md | grep -v '203.0.113|0.0.0.0|10\.0\.'` →
+    all three empty. No account IDs, no access keys, no IP outside the RFC 5737 documentation
+    range or the VPC's own `10.0.0.0/16`.
+  - `grep -oP '\]\(\K[^)]+' README.md | grep -v '^http' | while read -r l; do [ -e "$l" ] ||
+    echo "BROKEN: $l"; done` → empty (no broken links). Caught and fixed three same-page
+    `#anchor` links that the literal `[ -e "$l" ]` check cannot resolve (anchors aren't files);
+    replaced with plain bold cross-references instead of markdown links.
+  - Diagram alignment: generated programmatically with a Python script (fixed interior width,
+    `str.ljust`), the *first* hand-transcription attempt was verified broken (`len()` per row
+    varied 64–66), regenerated to a scratch file and pasted its exact bytes; re-verified every
+    box-drawing row is exactly 64 Unicode codepoints (`python3` `len()` per line, not `awk`, which
+    reported byte counts under this shell's locale and would have hidden the bug).
+  - `awk`-based extraction of the embedded `deployment-arm64.yaml` block, diffed against
+    `examples/deployment-arm64.yaml` → identical.
+  - Spot-checked every factual claim against source: version table against `versions.tf` /
+    `modules/eks/main.tf` / `modules/network/main.tf`; the `0.0.0.0/0` validation message against
+    `variables.tf` verbatim; the cost figures against `docs/00-architecture-and-decisions.md` §5;
+    all four Troubleshooting gotcha codes against `docs/reference/gotchas.md`; the
+    `enable_aws_load_balancer_controller`/`enable_metrics_server` "inert" claim by grepping both
+    names across every `.tf` file (declared, one wired through to `modules/eks` as an input,
+    neither consumed by any resource).
+  - Cold-read test: a fresh `general-purpose` agent, given the scope boundary and only
+    `README.md`, walked the full clone→demo→teardown path and reported 21 findings (13 real
+    gaps/inconsistencies, others no-defect confirmations); see above for the disposition of each.
+  - `terraform apply`, `kubectl`, and every "With credentials" style check — **not run.** No AWS
+    credentials were available in this environment, consistent with every prior phase's
+    completion report. The Status note in `README.md` states this explicitly and the sample
+    `kubectl` output is labelled illustrative for the same reason.
+
 - Notes for the next phase:
+  - **Phase 8 is a real, undocumented gap, not an optional phase.** `scripts/verify.sh` and
+    `scripts/teardown.sh` do not exist (`ls scripts/` → no such directory); `phase-08-*.md`'s own
+    completion report is still the blank template. The README's Teardown section documents the
+    manual G-09 sequence as the current stand-in and says so explicitly; once Phase 8 ships,
+    Teardown's bash block should be replaced with the real `make destroy`/`scripts/teardown.sh`
+    invocation and the Status note's Phase-8 caveat removed.
+  - **`examples/deployment-arm64.yaml`'s "No CPU limit is set on purpose" comment is arguably
+    inaccurate** given the `demo` namespace LimitRange's `default: {cpu: "1"}` — see cold-read gap
+    #12 above. Not fixed here (out of this phase's file scope, and fixing it would break the
+    "copied verbatim" requirement against the file Phase 6 actually shipped). Whoever next revises
+    Phase 6's examples should reconcile the comment with the LimitRange behavior, and this README
+    would then need its embedded copy re-synced.
+  - `create_spot_service_linked_role`'s default-`false` change (Phase 3) has no corresponding
+    commented-out line in `terraform.tfvars.example` — Phase 3's own completion report flagged
+    this as a Phase 7 consideration. Documented in the README's Prerequisites/Configuration
+    sections instead of editing `terraform.tfvars.example`, since that file is outside this
+    phase's deliverable (`README.md` only); a future phase touching that file could add the
+    commented example line Phase 3 suggested.
+  - `enable_aws_load_balancer_controller` and `enable_metrics_server` are declared and (the latter
+    only) wired as far as `modules/eks`, but neither is consumed by any resource — confirmed by
+    grep, documented in the README's "Not included / possible extensions." Phase 9/10, if
+    implemented, should either wire them up or the README's phrasing there should be revisited.
+  - This phase never touched anything outside `terraform/`; no scope-boundary issues to report.
