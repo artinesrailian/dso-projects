@@ -314,7 +314,12 @@ and stop. Do not start Phase 5.
   positive greps and the three negative (leakage) greps, and S-40 through S-44 are satisfied and
   traced to specific lines below. The "With credentials" acceptance criteria are unverified — no
   AWS credentials were available or acquired, per the task's own instruction not to run
-  `terraform apply` without them.
+  `terraform apply` without them. **Reviewed 2026-08-16:** independently re-ran every acceptance
+  check, re-verified `helm.tf`/`providers.tf`/`versions.tf`/`variables.tf`/`outputs.tf` line by
+  line against `version-pinning.md` §2.1–§2.2, `karpenter-api-reference.md` §6,
+  `interface-contract.md` §4/§5.3/§7 and `gotchas.md` G-04/G-05/G-09/G-19/G-20/G-21, and confirmed
+  `var.karpenter_version` defaults to `1.14.0` and `var.karpenter_namespace` to `kube-system`. No
+  code or contract drift found — see Deviation #6.
 
 - Files created/changed:
   - `modules/karpenter/helm.tf` — **new.** Two `helm_release` resources: `karpenter_crd` (chart
@@ -406,6 +411,19 @@ and stop. Do not start Phase 5.
   5. No deviation from the two-Helm-release structure, the v3 attribute syntax, `dnsPolicy`,
      `settings.interruptionQueue`, `wait = true`, or the "do not set" list — all implemented exactly
      as specified.
+  6. **(Added during the 2026-08-16 review pass.)** `modules/karpenter/README.md`'s "Helm values
+     intentionally not set" section claimed the `spotToSpotConsolidation` future-work note was
+     "noted... in the root README" — false at the time it was written, since the root README does
+     not exist yet (it is Phase 7's deliverable, `docs/phases/phase-07-readme.md`, which does not
+     mention `spotToSpotConsolidation` either — confirmed by grep). The instruction itself
+     (phase-04 §4.3 / `karpenter-api-reference.md` §6: "mention it in the README as future work")
+     is satisfied — the module README is *a* README, and the mention exists — only the claim about
+     *which* README was wrong. Reworded to state plainly that this module's README is currently the
+     only carrier of that note, with an explicit pointer for Phase 7 to pick it up. No code change;
+     `fmt`/`validate`/`test` unaffected. Also checked `gotchas.md` G-09 (the destroy-ordering
+     deadlock, which names `helm_release.karpenter` directly in its root cause) — its Fix section
+     explicitly says "Phase 8 turns this into a scripted, verified runbook," so it is correctly out
+     of this phase's scope; no `depends_on` or lifecycle change belongs in `helm.tf` for it.
 
 - Names added to interface-contract.md: none. `helm_release_name` was already present in §5.3's
   signature (added there by Phase 3's own reservation of the full 7-output contract); this phase

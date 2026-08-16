@@ -150,8 +150,10 @@ actively break something here if set:
   carry a required `podAntiAffinity` on `kubernetes.io/hostname`, so they need
   two distinct nodes — see the bootstrap group's `min_size = 2` (Phase 2).
 - **`featureGates.*`.** All left at safe defaults. `spotToSpotConsolidation`
-  is tempting for cost but is alpha; noted as future work in the root README,
-  not enabled here.
+  is tempting for cost but is alpha; not enabled here. The root README does
+  not exist yet (Phase 7), so this note is the only carrier of that
+  instruction until Phase 7 writes it — carry it forward as a future-work
+  bullet rather than dropping it silently.
 
 ## Provider auth: `exec`, not a static-token data source (Phase 4)
 
