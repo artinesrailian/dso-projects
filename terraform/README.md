@@ -108,7 +108,9 @@ That is the whole interface. `kubernetes.io/arch` is a standard Kubernetes label
 need to know anything about Karpenter or node pools to use it.
 
 Get access first (your `demo` namespace already exists — Terraform creates it with a Pod Security
-profile, a ResourceQuota and a LimitRange already applied; don't `kubectl create namespace`):
+profile, a ResourceQuota and a LimitRange already applied; don't `kubectl create namespace`). If
+you didn't run `terraform apply` yourself, ask whoever did for an access entry — by default only
+the deploy principal has one; see [docs/operator-runbook.md §4](docs/operator-runbook.md).
 
 ```bash
 aws eks update-kubeconfig --region <region> --name <cluster-name>   # cluster-name: terraform output -raw cluster_name
@@ -232,9 +234,10 @@ kubectl get pods -n demo -o wide
 kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type
 ```
 
-The first two commands are cluster-scoped and need the same credentials used for `terraform
-apply` above — a namespace-scoped developer identity (see **Configuration** below) gets
-`Forbidden` on both, which is correct RBAC, not a broken cluster; see
+`kubectl get nodeclaims` and `kubectl get nodes` are cluster-scoped and need the same credentials
+used for `terraform apply` above — a namespace-scoped developer identity gets `Forbidden` on both,
+which is correct RBAC, not a broken cluster. `kubectl apply` and `kubectl get pods -n demo` are
+namespace-scoped and work with a developer identity alone; see
 [examples/README.md](examples/README.md) for what a developer's access actually covers. A
 realistic sample of the last command's output, once a Graviton node has joined
 (**illustrative — see Status above**):
@@ -286,12 +289,13 @@ example Deployments already do); that is the honest cost of the price/performanc
 **Cleanup:**
 
 ```bash
-kubectl delete -f examples/deployment-arm64.yaml
+kubectl delete -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml -f examples/job-arch-check.yaml --ignore-not-found
 ```
 
-Karpenter removes the node it provisioned on its own, a few minutes after the last pod using it
+Karpenter removes the nodes it provisioned on its own, a few minutes after the last pod using each
 is gone — no separate node-cleanup step. Shortcut for the whole walkthrough: `make demo` applies
-both example Deployments and prints where each pod landed; `make demo-clean` removes them.
+both example Deployments and prints where each pod landed; `make demo-clean` deletes everything in
+`examples/`, including the arch-check Job.
 
 ## ── FOR PLATFORM ENGINEERS ──────────────────────
 ## Operating this cluster
@@ -306,16 +310,16 @@ README states what exists and links out — it does not duplicate that document.
 
 The variables most people actually set (46 total; full table:
 [docs/contracts/interface-contract.md §3](docs/contracts/interface-contract.md)). Also worth
-setting: `alert_email` — subscribes to the KMS-key-danger CloudWatch alarm (see Known limitations
-below); empty by default, meaning that alarm is silent until you set it.
+setting: `alert_email` — subscribes to the KMS-key-danger alert (see Known limitations
+below); empty by default, meaning that alert is silent until you set it.
 
 | Variable | Default | What it controls |
 |---|---|---|
-| `cluster_endpoint_public_access_cidrs` | `[]` (required) | Your IP allowlist for the public API endpoint. `0.0.0.0/0` is rejected — *"0.0.0.0/0 is not allowed. Set your own /32, or use cluster_endpoint_public_access = false."* |
+| `cluster_endpoint_public_access_cidrs` | `[]` (required) | Your IP allowlist for the public API endpoint. An internet-open endpoint is the most commonly flagged EKS misconfiguration — IAM auth is not a substitute for network scoping — so `0.0.0.0/0` is rejected: *"0.0.0.0/0 is not allowed. Set your own /32, or use cluster_endpoint_public_access = false."* |
 | `budget_notification_email` | required | Who gets the AWS Budget alert. |
 | `create_spot_service_linked_role` | `false` | Set `true` only after confirming `AWSServiceRoleForEC2Spot` doesn't already exist. |
 | `single_nat_gateway` | `false` | One NAT instead of one per AZ — cheaper, loses HA. |
-| `bootstrap_node_min_size` | `2` | Drop to `1` to save cost; loses Karpenter-controller HA. |
+| `bootstrap_node_min_size` | `2` | Karpenter's chart runs 2 replicas with a required anti-affinity — dropping to `1` deadlocks Karpenter, not just its HA (gotchas G-05). The cost table in the ADR still frames this as "loses HA"; that framing predates the requirement being pinned down. Leave at `2`. |
 | `nodepool_default_arch` | `"arm64"` | Which pool wins when a pod sets no `kubernetes.io/arch`. |
 | `node_ami_alias` | `"al2023@latest"` | Pin to a release tag for production — see Operations below. |
 | `region` | `"us-east-1"` | AWS region. |
@@ -327,7 +331,6 @@ cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"] # curl -s https://che
 budget_notification_email            = "you@example.com"
 
 single_nat_gateway         = true      # ~$33/mo instead of ~$99/mo — single point of failure
-bootstrap_node_min_size    = 1         # ~$25/mo instead of ~$49/mo — loses controller HA
 enable_vpc_flow_logs       = false     # $0 instead of ~$5-20/mo
 cluster_enabled_log_types  = ["audit"] # instead of all 5 log types
 ```
@@ -335,11 +338,12 @@ cluster_enabled_log_types  = ["audit"] # instead of all 5 log types
 ## Cost
 
 Idle total is **~$245/mo** at the production-shape defaults above (`us-east-1`, rates verified
-2026-08-11), or **~$165/mo** with every POC override in the block above applied. The two biggest
-levers are NAT gateways (~$99 → ~$33/mo) and interface VPC endpoints, which default **off**
-because turning them on (~$263/mo for 12 endpoints × 3 AZs) would roughly double the idle bill —
-the single largest line item in the whole stack. Karpenter-provisioned nodes are pay-per-use and
-consolidate to zero when idle. Full table:
+2026-08-11), or **~$165/mo** with all of the ADR's POC toggles applied — which additionally
+assumes `bootstrap_node_min_size = 1`, a toggle this README does not recommend (see Configuration
+above). The two biggest levers are NAT gateways (~$99 → ~$33/mo) and interface VPC endpoints, which
+default **off** because turning them on (~$263/mo for 12 endpoints × 3 AZs) would roughly double
+the idle bill — the single largest line item in the whole stack. Karpenter-provisioned nodes are
+pay-per-use and consolidate to zero when idle. Full table:
 [docs/00-architecture-and-decisions.md §5](docs/00-architecture-and-decisions.md).
 
 ## How it works
@@ -453,9 +457,9 @@ terraform/
 ## Known limitations
 
 - **KMS CMK availability.** Cluster secrets are encrypted with a customer-managed key; if that key
-  is disabled or scheduled for deletion, the control plane loses access to its own secrets. A
-  CloudWatch alarm on key state exists (subscribe it via `alert_email`, see Configuration), but
-  there is no automated recovery.
+  is disabled or scheduled for deletion, the control plane loses access to its own secrets. An
+  EventBridge rule detects this via CloudTrail (so it requires CloudTrail to be enabled) and
+  notifies `alert_email` (see Configuration), but there is no automated recovery.
 - **`hostNetwork` pods bypass the IMDS hop limit.** IMDSv2's hop limit blocks containerised access
   to node credentials for ordinary pods; a pod with `hostNetwork: true` reaches IMDS directly.
 - **`node_ami_alias` defaults to `al2023@latest`**, so nodes drift on every new AMI release rather
@@ -464,6 +468,7 @@ terraform/
 ## Not included / possible extensions
 
 Phases 9–11 were not implemented: an AWS Load Balancer Controller, metrics-server + HPA, and
-CI/CD. `enable_aws_load_balancer_controller` and `enable_metrics_server` exist as variables
-(wired as far as `modules/eks`) but nothing consumes them yet — setting either to `true` currently
-changes nothing observable.
+CI/CD. `enable_metrics_server` exists as a variable and is wired as far as `modules/eks` (which
+ignores it); `enable_aws_load_balancer_controller` exists as a root variable only, wired nowhere.
+Neither is consumed by any resource — setting either to `true` currently changes nothing
+observable.

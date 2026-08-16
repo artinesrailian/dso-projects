@@ -446,3 +446,42 @@ docs/phases/phase-07-readme.md and stop. Do not start Phase 8.
     grep, documented in the README's "Not included / possible extensions." Phase 9/10, if
     implemented, should either wire them up or the README's phrasing there should be revisited.
   - This phase never touched anything outside `terraform/`; no scope-boundary issues to report.
+
+---
+
+## Phase 7 review (follow-up)
+
+Independently re-verified `README.md` with five parallel, read-only checks (acceptance criteria,
+structure/developer-section compliance, factual accuracy, S-70–S-73, adversarial cold-read) rather
+than trusting the report above. Fixed in `README.md`:
+
+- **RBAC claim was backwards.** Said `kubectl apply` needs terraform-apply-level credentials —
+  false and contradicted by `examples/README.md`, which the same sentence cites. `kubectl apply`
+  and `get pods -n demo` are namespace-scoped; `get nodeclaims`/`get nodes` are the cluster-scoped
+  pair. This misled R7's exact audience. Corrected the pair; dropped a dead "(see Configuration)"
+  pointer.
+- **The "POC-cheap" tfvars example deadlocked Karpenter.** `bootstrap_node_min_size = 1` — per
+  gotchas G-05 and `modules/karpenter/README.md`, the chart's 2-replica anti-affinity is hardcoded
+  with no variable to relax it, so this stops autoscaling outright, not just HA, contradicting the
+  README's own Troubleshooting section. Removed from the POC block; Configuration row now states
+  the real consequence and flags that `docs/00-architecture-and-decisions.md` §5 still lists this
+  as a `loses HA` toggle (not fixed there — different phase's file, out of scope here).
+- **Cleanup was incomplete** — deleted only `deployment-arm64.yaml` though the walkthrough also
+  applies `job-arch-check.yaml` (no TTL) and `deployment-x86.yaml`. Now deletes all three, with
+  `--ignore-not-found` to match the Makefile's own pattern.
+- **S-72 half-satisfied** — gave the `/32` remedy but never the *why*. Added a one-clause rationale
+  from `variables.tf`'s own description.
+- **No access path for a non-deploy-principal developer.** Added a pointer to
+  `docs/operator-runbook.md` §4.
+- **`enable_aws_load_balancer_controller`** was wrongly said to be "wired as far as `modules/eks`"
+  — grep shows it's a root variable referenced nowhere else; only `enable_metrics_server` reaches
+  `modules/eks`. Corrected.
+- **KMS-key-danger detector mislabeled "CloudWatch alarm"** — it's an EventBridge rule on
+  CloudTrail events via SNS (no metric alarm exists). Reworded; disclosed the CloudTrail
+  dependency, previously unstated.
+
+Left as-is (nitpick-level, or a different phase's file): `~20 min` vs. the Makefile's own `4+15+3`;
+the x86 example's comment-only deltas beyond the stated arch/name/label diff; the diagram being a
+redraw rather than a literal trim of §2's. Length is now 474 lines, still inside the 250–450 band
+the "Agent prompt" section dispatched. Re-verified after fixes: leaked-identifier/broken-link
+greps empty, embedded YAML still byte-identical to `examples/deployment-arm64.yaml`.
