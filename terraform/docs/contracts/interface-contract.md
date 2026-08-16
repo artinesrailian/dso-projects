@@ -290,7 +290,11 @@ signature exactly, because a later phase is already written against it.
 | in | `enabled_log_types` | `list(string)` |
 | in | `log_retention_days` | `number` |
 | in | `admin_principal_arns` | `list(string)` |
+| in | `developer_principal_arns` | `list(string)` |
+| in | `developer_rbac_group` | `string` |
+| in | `alert_email` | `string` — subscriber for the KMS-key-danger alarm's SNS topic; `""` = silent |
 | in | `bootstrap_node_instance_types` | `list(string)` |
+| in | `bootstrap_node_ami_type` | `string` — must match the architecture of `bootstrap_node_instance_types` |
 | in | `bootstrap_node_min_size` / `_max_size` / `_desired_size` | `number` |
 | in | `taint_bootstrap_nodes` | `bool` |
 | in | `enable_metrics_server` | `bool` — Phase 10 only; ignored otherwise |

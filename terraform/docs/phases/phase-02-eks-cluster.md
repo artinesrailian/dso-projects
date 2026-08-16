@@ -755,11 +755,210 @@ and stop. Do not start Phase 3.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE
 
-- Status:
 - Files created/changed:
+  - `modules/eks/versions.tf`, `modules/eks/variables.tf`, `modules/eks/main.tf`,
+    `modules/eks/iam.tf`, `modules/eks/outputs.tf`, `modules/eks/README.md` —
+    new, per "Files to create."
+  - `main.tf` — added `module "eks"` (module blocks only, no resources —
+    interface-contract §1 rule 1 preserved). Wires `module.network.intra_subnet_ids`
+    straight to `control_plane_subnet_ids` since it is not a root output
+    (per phase-01's completion report).
+  - `outputs.tf` — added the eight cluster outputs interface-contract §4
+    lists (`cluster_name`, `cluster_endpoint`, `cluster_version`,
+    `cluster_certificate_authority_data` [sensitive], `cluster_security_group_id`,
+    `node_security_group_id`, `oidc_provider_arn`) plus `configure_kubectl`.
+    `kms_key_arn` is **not** re-exported at root — §4 doesn't list it there;
+    it stays a `modules/eks` output only.
+  - `docs/contracts/interface-contract.md` — added 4 rows to §5.2's `modules/eks`
+    input table (see "Names added" below); this file's own rule requires it
+    in the same change.
+  - `docs/reference/version-pinning.md` — added a `hashicorp/cloudinit` row
+    to the §1 providers table (see Deviations).
+  - `versions.tf` (root) — added `null` (`~> 3.3`) and `cloudinit` (`~> 2.4`)
+    to `required_providers`, matching the existing `tls`/`time`
+    "transitive: eks module" pattern, per interface-contract §8 rule 2
+    ("pin every provider with `~>`").
+  - `.terraform.lock.hcl` — updated by `terraform init` to add `null` and
+    `cloudinit`.
+  - `tests/cidr_guard.tftest.hcl`, `tests/network_endpoints.tftest.hcl` —
+    extended `mock_provider "aws" {}` with three more `mock_data` overrides
+    (`aws_partition`, `aws_caller_identity`, `aws_iam_session_context`) — see
+    Verification run. Phase-01's completion report predicted this exact need.
+
 - Deviations from spec (**especially any variable name you had to correct**):
+  1. **Variable names — no drift found.** Every variable phase-02's snippets
+     use that was not already in `reference/version-pinning.md`'s verified
+     list was checked directly against
+     `https://raw.githubusercontent.com/terraform-aws-modules/terraform-aws-eks/v21.24.2/{variables,outputs,main}.tf`
+     (downloaded and grepped, not recalled): `create_cloudwatch_log_group`,
+     `cloudwatch_log_group_retention_in_days`, `kms_key_enable_default_policy`,
+     `node_security_group_tags`, `encryption_config.resources`,
+     `authentication_mode`, `access_entries` (including the nested
+     `policy_associations`/`kubernetes_groups` schema), `enable_cluster_creator_admin_permissions`,
+     `attach_cluster_primary_security_group` (confirmed default `false`), and
+     every `eks_managed_node_groups.*` field used (`ami_type`, `capacity_type`,
+     `min_size`/`max_size`/`desired_size`, `subnet_ids`, `labels`, `taints`,
+     `block_device_mappings`, `metadata_options`, `iam_role_attach_cni_policy`).
+     Also confirmed `bootstrap_self_managed_addons = false` is hardcoded in
+     `main.tf`'s `lifecycle.ignore_changes` and is **not** an exposed
+     variable, exactly as SS2.4 claims. No corrections were needed anywhere.
+  2. **§5.2's own table omitted 4 inputs its own code snippets require.**
+     `bootstrap_node_ami_type` (§2.6 `ami_type = var.bootstrap_node_ami_type`),
+     `developer_principal_arns` and `developer_rbac_group` (§2.2's
+     `access_entries` merge), and `alert_email` (§2.3's SNS subscription) are
+     all referenced in the phase's own text but were not rows in §5.2's
+     table. All four already exist as root variables (Phase 0), so wiring
+     them through `main.tf` was mechanical — added as new `modules/eks`
+     inputs and documented per interface-contract's own rule ("If a phase
+     needs a name not in this file, add it in the same change"). See "Names
+     added" below.
+  3. **Two new transitive providers surfaced only once `module.eks` was
+     wired in.** `terraform init` pulled `hashicorp/null` (already listed in
+     `version-pinning.md` §1 as "probably not needed" — it turned out to be
+     needed, via the `eks-managed-node-group` submodule) and
+     `hashicorp/cloudinit` (not listed in `version-pinning.md` at all — new
+     to that document). Pinned both explicitly in root `versions.tf` at the
+     versions `terraform init` actually resolved (`null` 3.3.1 satisfies
+     `~> 3.3`; `cloudinit` 2.4.0 satisfies the newly added `~> 2.4`), and
+     added the missing `cloudinit` row to `version-pinning.md` §1, noting it
+     was verified via `terraform init` output on 2026-08-16 rather than an
+     independent registry check.
+  4. **`terraform test`'s mocked-provider plans needed three more `mock_data`
+     overrides**, exactly as phase-01's completion report predicted. Once
+     `module.eks` entered the plan, the AWS provider's default (placeholder)
+     mock values for `aws_partition.partition`, `aws_caller_identity.arn`
+     and `aws_iam_session_context.issuer_arn` are not valid ARN/partition
+     strings, and the upstream eks module builds real IAM policy ARNs and
+     the cluster-creator access entry's `principal_arn` directly from them —
+     both fail AWS provider schema validation with real (non-placeholder)
+     values required. Fixed with concrete mock defaults (a fake but
+     well-formed `123456789012` account and `arn:aws:iam::...` ARNs), not by
+     weakening any module code. Re-ran: 5/5 pass, same assertions as
+     phase-01 left plus the two now-passing runs that touch `module.eks`.
+  5. **S-27 (security-checklist.md, "Phase 2 — Cluster") is only partially
+     satisfied, and the unsatisfied half is a deliberate scope decision, not
+     an oversight.** `security-checklist.md` was not in this phase's
+     assigned reading list and is not cited in phase-02.md's own "Security
+     requirements owned by this phase" section (S-20–S-26 only) or in its
+     §2.6 code snippet — but it groups S-27 under "Phase 2" and states
+     "that phase may not report DONE until its items are satisfied," so it
+     is recorded here rather than silently dropped, per that document's own
+     "How to use this in a phase" §4.
+     - **Satisfied:** `iam_role_attach_cni_policy = false` on the bootstrap
+       node group — this half is also explicitly directed by phase-02.md's
+       own §2.4 text ("Phase 3 sets `node_iam_role_attach_cni_policy = false`
+       on the Karpenter node role for the same reason[, implying this phase
+       does the analogous thing for the bootstrap group]").
+     - **Not satisfied:** S-27 also asks for `AmazonEC2ContainerRegistryPullOnly`
+       in place of the module's default `AmazonEC2ContainerRegistryReadOnly`
+       on the bootstrap node role. Verified against
+       `modules/eks-managed-node-group/main.tf` (v21.24.2): that policy
+       attachment is hardcoded and unconditional — the only way to change it
+       is `create_iam_role = false` plus a hand-built IAM role passed in via
+       `iam_role_arn`, which phase-02.md's own §2.6 snippet does not show
+       and which is a materially bigger change (a third, differently-shaped
+       IAM role in `iam.tf`, full ownership of that role's policy surface)
+       than anything else this phase asks for. Given the explicit instruction
+       to implement phase-02 "exactly as specified" from the assigned
+       reading list, this half was left undone rather than added
+       unilaterally. **Flagging for Phase 8's audit sign-off**, and it is a
+       cheap, well-understood fix if a future phase wants it.
+  6. **CloudTrail's prerequisite for S-29 (the KMS alarm) is unverified.**
+     §2.3 says "this depends on CloudTrail being enabled in the account —
+     verify that, and if it is not, say so." This environment has no AWS
+     credentials, so it cannot be checked; recorded here rather than
+     implying the alarm is proven to fire.
+  7. **Added an SNS topic policy** (`aws_sns_topic_policy.alerts`, scoped to
+     `events.amazonaws.com` with an `aws:SourceArn` condition on the
+     specific EventBridge rule) — §2.3's code block doesn't include one, but
+     its prose is explicit: "The SNS topic policy must allow
+     `events.amazonaws.com` to publish." Without it the EventBridge target
+     would fail to deliver silently.
+  8. **The default `gp3` StorageClass (§2.5b) was not created here**, per
+     that section's own instruction: this stack has no `kubernetes` provider
+     (ADR-6), so it belongs in Phase 5's local Helm chart, which already
+     owns cluster-scoped objects. Noted again below for the Phase 5 agent.
+  9. Root `outputs.tf` does not add a `region` output. Interface-contract §4
+     lists one, but it predates this phase, is not a cluster output, and no
+     prior phase added it either — an existing gap, not one introduced or
+     closed here. Left as-is; flagging in case a future phase should close it.
+
 - Names added to interface-contract.md:
-- Verification run:
+  - `modules/eks` §5.2 inputs: `developer_principal_arns` (`list(string)`),
+    `developer_rbac_group` (`string`), `alert_email` (`string`),
+    `bootstrap_node_ami_type` (`string`). All four already existed as root
+    `variables.tf` entries from Phase 0 — only the `modules/eks` §5.2 rows
+    were missing.
+
+- Verification run (all from `terraform/`, no AWS credentials used or
+  required):
+  - `terraform fmt -check -recursive` → clean (exit 0), after `terraform fmt
+    -recursive` fixed alignment in `main.tf`, `modules/eks/main.tf` and
+    `versions.tf`.
+  - `terraform init -backend=false` → downloads `terraform-aws-modules/eks/aws`
+    21.24.2 (plus its nested `kms`, `eks-managed-node-group`,
+    `self-managed-node-group`, `fargate-profile` and `_user_data` submodule
+    calls) — succeeds; adds `hashicorp/null` and `hashicorp/cloudinit` to
+    `.terraform.lock.hcl`.
+  - `terraform validate` (root) → `Success! The configuration is valid.`
+  - `terraform -chdir=bootstrap init -backend=false && terraform -chdir=bootstrap validate`
+    → `Success!` (unaffected by this phase).
+  - Static assertions, run verbatim from `modules/eks/`: all 8 positive
+    checks printed PASS (access entries, not locked out, pod identity agent,
+    node SG tagged, vpc-cni ordering, addon adoption, pod identity trust,
+    IMDSv2); both negative greps (v20 names / locked-out config, stripped of
+    comment lines) produced **no output**, confirmed by writing every
+    "v20 called this X" note as its own full comment line rather than a
+    trailing one — an unanchored trailing comment on the same line as
+    `kubernetes_version = var.kubernetes_version` would otherwise make the
+    negative grep for `cluster_version` false-fail on the module's own
+    documentation.
+  - `terraform test` → 5 passed, 0 failed, after extending both
+    `mock_provider "aws" {}` blocks with `aws_partition`, `aws_caller_identity`
+    and `aws_iam_session_context` mock defaults (see Deviations #4).
+  - `make check` → fmt + validate (root and `bootstrap/`) + test all green;
+    `lint` cleanly skips (tflint/checkov not installed).
+  - `terraform apply` — **not run.** No AWS credentials were provided to this
+    environment and the task explicitly says not to acquire them implicitly.
+    Everything under "With credentials" in the Acceptance criteria (the
+    2-node ARM64 `kubectl get nodes` check, the Pending-pods taint-tolerance
+    check, the `aws eks describe-cluster` encryption/logging check) is
+    therefore unverified against a real cluster.
+
 - Notes for the next phase:
+  - `module.eks.node_security_group_id` (root output, and `modules/eks`
+    output) is Phase 3's `node_security_group_id` input for the Karpenter
+    submodule — the security group already carries `karpenter.sh/discovery`
+    from this phase; Phase 3 does not need to tag it again.
+  - `module.eks.cluster_name` / `cluster_endpoint` feed Phase 3/4 directly.
+    Remember the output-name asymmetry documented throughout this phase:
+    `module.eks.cluster_name` (this module's own output) is correct;
+    reaching for `module.eks.name` anywhere will not work, including inside
+    Phase 3/4's own use of the *nested* `terraform-aws-modules/eks/aws`
+    module if they ever call it directly instead of going through this
+    wrapper.
+  - Phase 3 must **not** create a second security group carrying
+    `karpenter.sh/discovery` — "at most one per account" (phase-02 §2.7);
+    this module's node SG is the only one that should ever carry it.
+  - Phase 5's local Helm chart must add the default `gp3` StorageClass
+    (§2.5b) — it was deliberately not created here (no `kubernetes` provider
+    in this stack). Without it, any PVC with no `storageClassName` sits
+    `Pending` forever with no explanatory error.
+  - **Unverified without credentials**, flagged for whoever runs Phase 8 (or
+    the first real `apply`): the CloudTrail prerequisite for the KMS-key-danger
+    alarm (S-29); the taint/toleration matrix in §2.6 (is anything actually
+    `Pending` on the tainted bootstrap nodes — `aws-ebs-csi-driver` controller
+    is explicitly called out as needing verification, not assumed); and
+    whether the CNI's own Pod Identity association actually leaves pod
+    networking working (§2.4's own instruction: "verify pod networking still
+    works after this change").
+  - S-27's ECR-policy half (`AmazonEC2ContainerRegistryPullOnly` on the
+    bootstrap node role) is an open, documented gap — see Deviations #5 —
+    for Phase 8's audit sign-off to either accept or send back.
+  - `bootstrap_node_desired_size` changes after first `apply` need
+    `aws eks update-nodegroup-config` or a `min_size` change — HCL-only
+    changes are silently ignored (module's own `lifecycle.ignore_changes`,
+    reference/gotchas.md G-06). Worth remembering before anyone "fixes" a
+    Pending Karpenter replica by editing `desired_size` in `terraform.tfvars`.
