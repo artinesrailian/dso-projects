@@ -755,7 +755,15 @@ and stop. Do not start Phase 3.
 
 ## Completion report
 
-- Status: DONE
+- Status: PARTIAL — every requirement in this phase's own "Security requirements owned by
+  this phase" list (S-20–S-26) is satisfied, all acceptance-criteria static assertions pass,
+  and `fmt`/`validate`/`test` are green. The one open item is `security-checklist.md`'s S-27
+  (grouped under "Phase 2" there, though absent from this phase doc's own S-list and its §2.4
+  code): the ECR-policy half is deliberately left undone — see Deviations #5 — so this cannot
+  honestly report DONE per that checklist's own gating rule. Reviewed 2026-08-16: fixed a
+  related gap (KMS rotation/deletion-window were correct only via unstated module defaults,
+  not stated in code — see Deviations #10) and confirmed no other requirement in this phase's
+  own scope was missed; S-27 remains the sole outstanding item, flagged for Phase 8 as before.
 
 - Files created/changed:
   - `modules/eks/versions.tf`, `modules/eks/variables.tf`, `modules/eks/main.tf`,
@@ -884,6 +892,22 @@ and stop. Do not start Phase 3.
      lists one, but it predates this phase, is not a cluster output, and no
      prior phase added it either — an existing gap, not one introduced or
      closed here. Left as-is; flagging in case a future phase should close it.
+  10. **(Added during the 2026-08-16 review pass.)** §2.3's prose promises
+      "a 30-day deletion window and rotation enabled" for the CMK — that is
+      S-21's concrete requirement — but the original `main.tf` set only
+      `create_kms_key` and `kms_key_enable_default_policy`, leaving rotation
+      and the deletion window resting on unstated upstream module defaults.
+      Verified against `modules/eks-managed-node-group`'s parent module
+      source (`variables.tf`): `enable_kms_key_rotation` defaults `true` and
+      `kms_key_deletion_window_in_days` defaults `null`, which the module's
+      own description documents as resolving to AWS's 30-day default — so
+      behaviour was already correct, but silently so, and a future module
+      major version could change either default without this stack's tests
+      catching it (exactly the failure mode `version-pinning.md` §5
+      documents). Added both arguments explicitly (`enable_kms_key_rotation
+      = true`, `kms_key_deletion_window_in_days = 30`) so S-21 is asserted in
+      code rather than inherited. No behaviour change; `fmt`/`validate`/
+      `test` and all 8 static assertions re-run clean after the edit.
 
 - Names added to interface-contract.md:
   - `modules/eks` §5.2 inputs: `developer_principal_arns` (`list(string)`),
@@ -926,6 +950,14 @@ and stop. Do not start Phase 3.
     2-node ARM64 `kubectl get nodes` check, the Pending-pods taint-tolerance
     check, the `aws eks describe-cluster` encryption/logging check) is
     therefore unverified against a real cluster.
+  - **2026-08-16 review pass:** re-ran `terraform fmt -check -recursive`,
+    `terraform validate`, `terraform test` (5/5 pass) and all 8 static
+    assertions plus both negative greps after adding the explicit KMS
+    rotation/deletion-window arguments (Deviations #10) — all still clean.
+    Cross-checked every §2.x code block and both this phase's own S-list and
+    `security-checklist.md`'s Phase-2 rows against the implementation;
+    confirmed variable names, add-on set, node-group config, IMDSv2 settings,
+    output set and sensitivity marking all match. No other drift found.
 
 - Notes for the next phase:
   - `module.eks.node_security_group_id` (root output, and `modules/eks`

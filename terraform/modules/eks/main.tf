@@ -65,6 +65,12 @@ module "eks" {
   # which is why the alarm below exists.
   create_kms_key                = true
   kms_key_enable_default_policy = true
+  # S-21 requires rotation; both values already match this module's own
+  # defaults, but S-21/SS2.3 name them explicitly, so state them explicitly
+  # rather than leave a security control resting on an unstated upstream
+  # default (see reference/version-pinning.md SS5 on why that is dangerous).
+  enable_kms_key_rotation         = true
+  kms_key_deletion_window_in_days = 30
   # In v21, passing null here disables the CMK; the v20 idiom of {} does not.
   encryption_config = {
     resources = ["secrets"]
