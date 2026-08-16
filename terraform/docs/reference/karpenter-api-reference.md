@@ -238,6 +238,27 @@ e.g. `8h`, `90m` — seconds are not accepted), and `reasons` (`Underutilized`, 
 `schedule` and `duration` must be set together. When several budgets are active the **most
 restrictive** wins.
 
+> ⚠️ **Budgets do not cover everything, and the enum is the proof.** `reasons` accepts only
+> `Underutilized`, `Empty` and `Drifted` — so **node expiration (`expireAfter`) and Spot interruption
+> are not rate-limited by any budget.** "If unset the budget applies to all methods" means all
+> *budget-eligible* methods, not all disruption.
+>
+> That produces a trade-off you cannot configure your way out of:
+>
+> | | Respects PodDisruptionBudgets | Rate-limited by `disruption.budgets` |
+> |---|---|---|
+> | Consolidation / drift | yes | yes |
+> | **Expiration** (`expireAfter`) | yes — waits indefinitely if a PDB blocks | **no** |
+> | **Spot interruption** | best-effort, ~2 minutes | **no** |
+>
+> With `expireAfter: 720h` and no `terminationGracePeriod`, expiry is graceful but unbounded: a
+> blocking PDB stalls it forever. Set `terminationGracePeriod` and it becomes bounded but evicts
+> *through* PDBs. Neither setting is both. Graceful-and-unbounded is the right POC default — but say
+> so, rather than implying budgets cover it.
+>
+> Practical consequence on a Spot-first cluster: availability under interruption comes from
+> PodDisruptionBudgets and replica spread in the **workload**, not from anything Karpenter throttles.
+
 ### `consolidationPolicy`
 
 Enum: `WhenEmpty`, `WhenEmptyOrUnderutilized`, `Balanced`. Default `WhenEmptyOrUnderutilized`.
@@ -315,7 +336,12 @@ spec:
     # window IS the post-mortem window. Still fast enough to demo.
     consolidateAfter: 5m
     budgets:
-      - nodes: "10%"                          # never churn more than 10% at once
+      # Throttles VOLUNTARY disruption only. The `reasons` enum in the CRD is
+      # exactly [Underutilized, Empty, Drifted] — expiration and Spot
+      # interruption are NOT in it and are NOT rate-limited by this. Do not
+      # write "never churn more than 10%": that is false for the two cases
+      # most likely to churn the fleet.
+      - nodes: "10%"
 ```
 
 ### `amd64` — x86, opt-in

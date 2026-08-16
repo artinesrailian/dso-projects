@@ -78,6 +78,13 @@ months. During this plan's own research the model's recollection said "EKS 1.34 
 AWS documentation said **1.36**. If the pins look stale, run the re-verification block in
 `reference/version-pinning.md` §3 and update that file first.
 
+### If you are running this, not building it
+
+[**`operator-runbook.md`**](operator-runbook.md) is the platform engineer's document: AWS
+credentials, what the deploy principal needs, the state backend, **staged bring-up so you can test
+one layer at a time**, granting developers scoped access, upgrades and ordered teardown. It is the
+answer to "how do I actually run this?" — the phase docs below are for *building* it.
+
 ### Before phase 1, read these three
 
 1. [`00-architecture-and-decisions.md`](00-architecture-and-decisions.md) — the target architecture,
@@ -105,6 +112,10 @@ AWS documentation said **1.36**. If the pins look stale, run the re-verification
 | 6 | [Demo workloads](phases/phase-06-demo-workloads.md) | `examples/` manifests proving x86 / Graviton / multi-arch scheduling | 5 |
 | 7 | [User-facing README](phases/phase-07-readme.md) | `README.md` — the graded artifact | 0–6 |
 | 8 | [Verification & teardown](phases/phase-08-verification-teardown.md) | End-to-end test runbook, hardening audit, clean `destroy` | 0–7 |
+
+Phase 0 also produces the **`Makefile`**, which is the operator's entry point and the mechanism
+behind the staged bring-up in [`operator-runbook.md`](operator-runbook.md) §3. `make check` runs
+every static gate with no AWS credentials and no cost — use it after every phase.
 
 ### Optional — implement only if explicitly requested
 

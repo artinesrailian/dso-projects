@@ -266,7 +266,7 @@ belong to the build process, not the deliverable:
 
 | Artefact | Why it must go |
 |---|---|
-| ~54 occurrences of the absolute path `/home/artin/personal/git/opsfleet/terraform` | Someone's home directory in a submitted repo. Replace with `terraform/`-relative paths. |
+| ~54 occurrences of the absolute path `/home/artin/personal/git/dso-projects/terraform` | Someone's home directory in a submitted repo. Replace with `terraform/`-relative paths. |
 | References to the sibling `architecture/` assessment (12 files) | Names an unrelated submission. The scope boundary served its purpose during the build; it is noise now. |
 | Empty `## Completion report` templates | A form nobody filled in reads as abandoned work. |
 | `☐ Not started` status tracker in `docs/README.md` | Ships a to-do list as a deliverable. |
@@ -276,7 +276,7 @@ Do one pass over `docs/`:
 ```bash
 # 1. Absolute paths -> relative. Verify nothing else matches first.
 grep -rn '/home/artin' docs/ | wc -l
-grep -rl '/home/artin' docs/ | xargs sed -i 's|/home/artin/personal/git/opsfleet/terraform|terraform|g'
+grep -rl '/home/artin' docs/ | xargs sed -i 's|/home/artin/personal/git/dso-projects/terraform|terraform|g'
 
 # 2. Confirm the scope-boundary preambles and sibling-assessment references are gone.
 grep -rn 'SCOPE BOUNDARY\|architecture/' docs/ | grep -v 'architecture-and-decisions\|Architecture' 
@@ -355,18 +355,18 @@ terraform apply
 ```text
 Implement Phase 8 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.

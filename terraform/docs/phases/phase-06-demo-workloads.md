@@ -121,6 +121,57 @@ Test it.
 Do **not** apply these labels to `kube-system`: the VPC CNI, kube-proxy and the Pod Identity agent
 legitimately need privileged/hostNetwork access and would be blocked. Say so in a comment.
 
+**The same file must also carry a ResourceQuota and a LimitRange.** This is the single largest
+developer-safety gap in the design without them, and it is two small objects:
+
+```yaml
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: demo-quota
+  namespace: demo
+spec:
+  hard:
+    # The NodePool spec.limits cap the CLUSTER. Nothing caps a NAMESPACE — so
+    # without this, one developer's `replicas: 200` consumes the entire pool
+    # budget and every other developer's pods sit Pending with no explanation.
+    # Sized well under the per-pool limit so the namespace hits THIS first,
+    # where the error message names the quota.
+    requests.cpu: "20"
+    requests.memory: 40Gi
+    limits.cpu: "40"
+    limits.memory: 80Gi
+    count/deployments.apps: "20"
+    # A LoadBalancer Service provisions a real, internet-facing AWS load
+    # balancer from three lines of YAML. Zero forces developers to ask.
+    services.loadbalancers: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: demo-limits
+  namespace: demo
+spec:
+  limits:
+    - type: Container
+      # Karpenter sizes nodes from resource REQUESTS. A pod with none looks
+      # free, so Karpenter bin-packs it and it then fights real workloads for
+      # CPU and memory on a shared node. defaultRequest makes that impossible.
+      defaultRequest: { cpu: 100m, memory: 128Mi }
+      default:        { cpu: "1",  memory: 1Gi }
+      max:            { cpu: "4",  memory: 8Gi }
+```
+
+> **Why `services.loadbalancers: "0"`.** `AmazonEKSEditPolicy` grants `services` create. A
+> `Service` of `type: LoadBalancer` in this namespace provisions an **internet-facing** load
+> balancer into the public subnets Phase 1 tags `kubernetes.io/role/elb`, which punctures ADR-1's
+> private-data-plane claim — from three lines of YAML, by a developer who did not know that is what
+> the field means. Quota it to zero and let a platform engineer raise it deliberately (Phase 9 ships
+> an internal-by-default Ingress for the supported path).
+>
+> Set it to a non-zero value only alongside a documented decision about exposure.
+
 ### 6.3 `deployment-arm64.yaml` — the Graviton case
 
 The headline example. It must be **short enough to read in one screen** and heavily commented,
@@ -183,6 +234,17 @@ is hollow.
       topologySpreadConstraints:
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web-graviton }
+        # ADR-1 pays for three AZs on the grounds that AZ diversity is the primary
+        # Spot-availability lever. Nothing else in the stack actually spreads
+        # anything across zones — no NodePool carries a topology.kubernetes.io/zone
+        # requirement — so without this constraint all three replicas can sit in
+        # one AZ and the third AZ is pure cost. This is the line that makes the
+        # 3-AZ decision real.
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
           whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels: { app: web-graviton }
@@ -328,6 +390,29 @@ Keep it to about one screen. The full story lives in the top-level README.
 
 ---
 
+### 6.8 What is deliberately NOT demonstrated — say so
+
+The IMDS hop-limit control (S-51) is justified by "workloads use Pod Identity, so they have no
+legitimate need for IMDS". That justification is only honest if a developer can actually *get* a Pod
+Identity — and nothing in this POC shows them how, because no demo workload needs AWS access.
+
+Add a short section to `examples/README.md` rather than leaving the gap silent:
+
+> **My app needs to call AWS (S3, DynamoDB, Secrets Manager). How?**
+> Not with an access key in a Secret. Ask the platform team for an **EKS Pod Identity association**:
+> they create an IAM role trusted by `pods.eks.amazonaws.com` and associate it with your
+> ServiceAccount, exactly as this stack already does for the EBS CSI driver
+> (`modules/eks/iam.tf`). Your pod then picks the credentials up automatically through the AWS SDK —
+> no annotation, no mounted secret, no code change.
+> This POC ships no example of it because no demo workload needs AWS access. It is a
+> two-resource addition per application, not a redesign.
+
+Same for application secrets: there is no secrets-management story here (no External Secrets
+Operator, no Secrets Manager CSI driver). A developer will otherwise reach for a plain Kubernetes
+Secret, which every other developer in the shared namespace can read. Say that plainly.
+
+---
+
 ## Security requirements owned by this phase
 
 - **S-60** Manifests set `runAsNonRoot`, `allowPrivilegeEscalation: false`, drop all capabilities.
@@ -432,18 +517,18 @@ evidence the whole assignment turns on.
 ```text
 Implement Phase 6 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/opsfleet/terraform
+Working directory: /home/artin/personal/git/dso-projects/terraform
 
 SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/opsfleet/terraform. You never leave it.
+  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
      Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/opsfleet/architecture is a DIFFERENT,
+  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
      UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
      There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/opsfleet) — no new files,
+  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
      no new directories, no sibling of terraform/ or architecture/. Everything you produce
      lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/opsfleet`,
+  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
      `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
   If you believe you genuinely need something outside terraform/, stop and say so in your
   completion report instead of doing it.
