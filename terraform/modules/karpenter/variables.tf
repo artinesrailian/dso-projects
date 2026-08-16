@@ -4,17 +4,17 @@ variable "cluster_name" {
 }
 
 variable "cluster_endpoint" {
-  description = "EKS API endpoint. Unused by this phase's AWS-only resources — declared to hold interface-contract.md SS5.3's signature stable across phases. Phase 4's helm_release wiring is the expected consumer (e.g. settings.clusterEndpoint)."
+  description = "EKS API endpoint. Consumed by helm_release.karpenter's settings.clusterEndpoint (Phase 4); unused by this module's AWS-only resources in main.tf."
   type        = string
 }
 
 variable "karpenter_version" {
-  description = "Karpenter Helm chart version, used for both the karpenter and karpenter-crd charts. Unused by this phase — Phase 4 pins its helm_release resources to it."
+  description = "Karpenter Helm chart version. Pins both helm_release.karpenter and helm_release.karpenter_crd (Phase 4) — the two chart versions must always match."
   type        = string
 }
 
 variable "namespace" {
-  description = "Kubernetes namespace the Karpenter controller runs in. Feeds the pod identity association's namespace and, once Phase 4 exists, the Helm release namespace."
+  description = "Kubernetes namespace the Karpenter controller runs in. Feeds the pod identity association's namespace and both Helm releases' namespace (Phase 4)."
   type        = string
 }
 
