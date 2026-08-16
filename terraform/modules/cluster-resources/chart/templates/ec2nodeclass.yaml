@@ -1,0 +1,66 @@
+# Object name fixed by interface-contract.md §6: "default". Implements
+# karpenter-api-reference.md §2 verbatim — see that doc's §8 footgun checklist
+# before touching this file.
+apiVersion: karpenter.k8s.aws/v1
+kind: EC2NodeClass
+metadata:
+  name: default
+spec:
+  # Karpenter creates and manages the instance profile from this role.
+  # Mutually exclusive with spec.instanceProfile — we use role, never
+  # instanceProfile (Karpenter v1 builds the instance profile itself).
+  role: {{ .Values.nodeIamRoleName | quote }}
+
+  # `alias` must be the ONLY term in this list — CEL rejects an alias
+  # combined with any other amiSelectorTerms entry.
+  amiSelectorTerms:
+    - alias: {{ .Values.amiAlias | quote }}
+
+  # No `name` field on subnet selectors (unlike security groups). Both sides
+  # of this discovery tag must read local.name — see interface-contract.md
+  # §2.3.
+  subnetSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName | quote }}
+
+  securityGroupSelectorTerms:
+    - tags:
+        karpenter.sh/discovery: {{ .Values.clusterName | quote }}
+
+  # Explicit even though these match the schema defaults (S-51). Hop limit 1
+  # means a container cannot reach IMDS through the node's network namespace,
+  # so pods cannot steal the node role's credentials. Safe here because
+  # workloads use EKS Pod Identity, not node credentials. Caveat: a
+  # hostNetwork: true pod reaches IMDS regardless of hop limit — this is a
+  # strong control, not an absolute boundary.
+  metadataOptions:
+    httpEndpoint: enabled
+    httpProtocolIPv6: disabled
+    httpPutResponseHopLimit: 1
+    httpTokens: required
+
+  # Karpenter's per-family default blockDeviceMappings already set
+  # `encrypted: true`, but that default applies ONLY when this block is
+  # omitted entirely. The moment volumeSize is overridden, encrypted: true
+  # must be re-stated (S-50).
+  blockDeviceMappings:
+    - deviceName: /dev/xvda
+      rootVolume: true
+      ebs:
+        volumeSize: "50Gi" # string with a unit, not an integer
+        volumeType: gp3
+        encrypted: true
+        deleteOnTermination: true
+
+  # COST ALLOCATION — not decoration. Karpenter calls ec2:CreateFleet itself,
+  # so the AWS provider's default_tags never reach these instances; this is
+  # the only way the compute spend (the entire variable cost of the cluster)
+  # is attributable in Cost Explorer. Merged into one map — Karpenter rejects
+  # tags it manages itself (kubernetes.io/cluster/*, karpenter.sh/nodepool).
+  # Name and ManagedBy=karpenter (these instances are NOT Terraform-managed —
+  # distinct from local.tags' own ManagedBy=terraform) are the merge
+  # destination, so they win over any same-keyed entry in .Values.tags rather
+  # than producing a duplicate map key.
+  tags:
+    {{- $nodeTags := merge (dict "Name" (printf "%s-karpenter-node" .Values.clusterName) "ManagedBy" "karpenter") .Values.tags }}
+    {{- toYaml $nodeTags | nindent 4 }}

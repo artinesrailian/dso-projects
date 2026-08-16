@@ -1,0 +1,125 @@
+# Two arch-specific NodePools (ADR-9). Object names fixed by
+# interface-contract.md §6: "amd64" and "arm64". Both share the "default"
+# EC2NodeClass and differ only in name, kubernetes.io/arch, the arch label
+# and weight — see karpenter-api-reference.md §4. Karpenter has no
+# per-NodePool enable/disable field, so a disabled pool is simply not
+# rendered (guarded by .Values.<arch>.enabled) rather than tainted off.
+{{- if .Values.arm64.enabled }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: arm64
+spec:
+  # Higher weight = evaluated first. This is what makes an unconstrained pod
+  # land on Graviton by default (the price/performance ask) — see this
+  # module's README for the x86-image trade-off this creates (G-16).
+  weight: {{ .Values.arm64.weight }}
+
+  template:
+    metadata:
+      labels:
+        arch: arm64
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["arm64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: {{ .Values.capacityTypes | toJson }}
+        # Categories and generations, never a hardcoded instance-type list —
+        # a narrow type list is the number-one cause of "Karpenter can't find
+        # capacity", especially on Spot.
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"] # Graviton2 (6g) and newer
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8", "16"] # bounds node size; also excludes .metal
+
+      expireAfter: 720h # S-54: rotate nodes monthly so they stay patched
+
+  # spec.limits is PER-NODEPOOL — there is no cluster-wide limit in the API.
+  # Terraform divides the configured budget across the enabled pools so that
+  # nodepool_cpu_limit/nodepool_memory_limit_gi mean the real cluster
+  # ceiling. Memory is limited too (S-52): a cpu-only cap lets a
+  # memory-heavy workload provision far more instance than intended.
+  limits:
+    cpu: {{ .Values.cpuLimitPerPool | quote }}
+    memory: {{ printf "%sGi" (.Values.memoryLimitPerPool | toString) | quote }}
+
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    # REQUIRED whenever this block exists — consolidateAfter is in
+    # `disruption`'s own `required` list even though `disruption` itself
+    # carries a default (G-17). 5m, not 1m: this is the post-mortem window
+    # for `kubectl logs --previous` before an emptied node is deleted.
+    consolidateAfter: 5m
+    budgets:
+      # Throttles VOLUNTARY disruption only (Underutilized/Empty/Drifted).
+      # Node expiration and Spot interruption are NOT rate-limited by this.
+      - nodes: "10%"
+{{- end }}
+{{- if .Values.amd64.enabled }}
+---
+apiVersion: karpenter.sh/v1
+kind: NodePool
+metadata:
+  name: amd64
+spec:
+  weight: {{ .Values.amd64.weight }}
+
+  template:
+    metadata:
+      labels:
+        arch: amd64
+    spec:
+      nodeClassRef:
+        group: karpenter.k8s.aws
+        kind: EC2NodeClass
+        name: default
+
+      requirements:
+        - key: kubernetes.io/arch
+          operator: In
+          values: ["amd64"]
+        - key: kubernetes.io/os
+          operator: In
+          values: ["linux"]
+        - key: karpenter.sh/capacity-type
+          operator: In
+          values: {{ .Values.capacityTypes | toJson }}
+        - key: karpenter.k8s.aws/instance-category
+          operator: In
+          values: ["c", "m", "r"]
+        - key: karpenter.k8s.aws/instance-generation
+          operator: Gt
+          values: ["5"]
+        - key: karpenter.k8s.aws/instance-cpu
+          operator: In
+          values: ["2", "4", "8", "16"]
+
+      expireAfter: 720h
+
+  limits:
+    cpu: {{ .Values.cpuLimitPerPool | quote }}
+    memory: {{ printf "%sGi" (.Values.memoryLimitPerPool | toString) | quote }}
+
+  disruption:
+    consolidationPolicy: WhenEmptyOrUnderutilized
+    consolidateAfter: 5m
+    budgets:
+      - nodes: "10%"
+{{- end }}

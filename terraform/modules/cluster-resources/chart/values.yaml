@@ -1,0 +1,39 @@
+# Standalone-complete defaults so `helm lint` / `helm template` succeed with
+# NO --set flags at all (see phase-05-nodepools.md "Acceptance criteria" —
+# the first command sets only clusterName/nodeIamRoleName). Terraform always
+# overrides these via helm_release.cluster_resources's yamlencode'd values;
+# the values here exist purely so the chart is independently testable.
+
+clusterName: ""
+nodeIamRoleName: ""
+amiAlias: al2023@latest
+capacityTypes:
+  - spot
+  - on-demand
+
+# Reflects the root defaults nodepool_cpu_limit=100 / nodepool_memory_limit_gi=400
+# divided across the two enabled pools (100/2=50, 400/2=200) — see phase-05
+# §5.1's own comment on why spec.limits is per-NodePool, not cluster-wide.
+cpuLimitPerPool: 50
+memoryLimitPerPool: 200
+
+tags: {}
+
+amd64:
+  enabled: true
+  weight: 10
+arm64:
+  enabled: true
+  weight: 50
+
+governedNamespaces:
+  - demo
+
+namespaceQuota:
+  requestsCpu: "20"
+  requestsMemory: "40Gi"
+  limitsCpu: "40"
+  limitsMemory: "80Gi"
+  maxDeployments: 20
+
+developerRbacGroup: "opsfleet:developers"
