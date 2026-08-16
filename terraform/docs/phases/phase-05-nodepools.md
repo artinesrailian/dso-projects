@@ -1,7 +1,7 @@
 # Phase 5 — NodePools and EC2NodeClass (x86 + Graviton, Spot + On-Demand)
 
 **Depends on:** Phase 4.
-**Produces:** `modules/karpenter-resources/`, wired into `main.tf`.
+**Produces:** `modules/cluster-resources/`, wired into `main.tf`.
 
 ---
 
@@ -31,16 +31,17 @@ instance to appear within about a minute.
 ## Files to create
 
 ```
-modules/karpenter-resources/versions.tf
-modules/karpenter-resources/variables.tf
-modules/karpenter-resources/main.tf
-modules/karpenter-resources/outputs.tf
-modules/karpenter-resources/README.md
-modules/karpenter-resources/chart/Chart.yaml
-modules/karpenter-resources/chart/values.yaml
-modules/karpenter-resources/chart/templates/ec2nodeclass.yaml
-modules/karpenter-resources/chart/templates/nodepools.yaml
-modules/karpenter-resources/chart/templates/storageclass.yaml
+modules/cluster-resources/versions.tf
+modules/cluster-resources/variables.tf
+modules/cluster-resources/main.tf
+modules/cluster-resources/outputs.tf
+modules/cluster-resources/README.md
+modules/cluster-resources/chart/Chart.yaml
+modules/cluster-resources/chart/values.yaml
+modules/cluster-resources/chart/templates/ec2nodeclass.yaml
+modules/cluster-resources/chart/templates/nodepools.yaml
+modules/cluster-resources/chart/templates/storageclass.yaml
+modules/cluster-resources/chart/templates/namespaces.yaml
 ```
 
 ---
@@ -58,8 +59,8 @@ Per ADR-7. Restated because it determines the whole file layout:
 | **`helm_release` on a local chart** | **Chosen.** No extra provider, `depends_on` gives correct ordering, and `helm uninstall` removes the CRs cleanly on destroy — which matters, because orphaned NodePools with finalizers are a classic destroy hang. |
 
 ```hcl
-resource "helm_release" "karpenter_resources" {
-  name      = "karpenter-resources"
+resource "helm_release" "cluster_resources" {
+  name      = "cluster-resources"
   chart     = "${path.module}/chart"
   namespace = var.namespace
 
@@ -179,13 +180,306 @@ Phase 2 specifies a default `gp3` StorageClass and hands delivery to this chart,
 only Helm-delivered path for cluster-scoped objects in the stack (there is no `kubernetes` provider —
 ADR-6). Copy it verbatim from phase-02 §2.5b.
 
-The module is named `karpenter-resources` and this is not a Karpenter resource. That is a small
+The module is named `cluster-resources` and this is not a Karpenter resource. That is a small
 naming compromise, taken deliberately rather than adding a second provider or a second module for a
 single object. Say so in a comment at the top of the template.
 
 The one field not to change: `volumeBindingMode: WaitForFirstConsumer`. With Karpenter, `Immediate`
 binding provisions the volume before the node exists, in an AZ Karpenter may not choose, and the pod
 then never schedules.
+
+### 5.3c Governed namespaces — the guardrails must be Terraform-created
+
+**This is the fix for an ordering bug, so understand why before you write it.**
+
+Phase 2 creates the developer access entries in Terraform: after `terraform apply`, every principal
+in `developer_principal_arns` is bound to the `developer_rbac_group` group, scoped to the namespaces
+in `developer_namespaces`. If the namespace, its Pod Security labels and its ResourceQuota are a
+`kubectl apply` a human is supposed to remember, then **Terraform hands out access to a namespace
+whose guardrails may not exist** — and nothing reconciles them afterwards. An operator doing
+`kubectl create namespace demo` by hand produces an unlabelled, unquota'd namespace that developers
+already have edit rights on.
+
+So the namespace and everything governing it are created *here*, by Terraform, through the same
+chart as the StorageClass:
+
+```yaml
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    # In-tree Pod Security Admission. Terraform-managed, so `helm upgrade` on the
+    # next apply restores these if anyone strips them.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: { name: {{ . }}-quota, namespace: {{ . }} }
+spec:
+  hard:
+    # --- compute -----------------------------------------------------------
+    requests.cpu: {{ $.Values.namespaceQuota.requestsCpu | quote }}
+    requests.memory: {{ $.Values.namespaceQuota.requestsMemory | quote }}
+    limits.cpu: {{ $.Values.namespaceQuota.limitsCpu | quote }}
+    limits.memory: {{ $.Values.namespaceQuota.limitsMemory | quote }}
+
+    # --- storage: the expensive omission ----------------------------------
+    # The EBS CSI driver is installed and §2.5b ships a DEFAULT StorageClass, so
+    # a bare PVC provisions real EBS. gp3 tops out at 16 TiB (~$1,310/mo each)
+    # and a pod can mount ~25. Twenty volumes is ~$26,000/month while consuming
+    # 100m of the CPU quota. Worse, StatefulSet volumeClaimTemplates are RETAINED
+    # on delete and teardown.sh does not sweep EBS — the spend outlives the
+    # cluster. A quota with no storage dimension is not a cost control.
+    persistentvolumeclaims: "10"
+    requests.storage: 200Gi
+    gp3.storageclass.storage.k8s.io/requests.storage: 200Gi
+
+    # --- ephemeral storage -------------------------------------------------
+    # An emptyDir with no sizeLimit fills the 50 GiB node root volume, triggers
+    # DiskPressure, and the kubelet evicts OTHER developers' pods off that node.
+    requests.ephemeral-storage: 20Gi
+    limits.ephemeral-storage: 40Gi
+
+    # --- object counts -----------------------------------------------------
+    # count/deployments alone is trivially sidestepped: the Role also grants
+    # statefulsets, bare replicasets, jobs and cronjobs. A CronJob with
+    # `schedule: "* * * * *"` and concurrencyPolicy Allow is the classic
+    # accident. count/pods also bounds VPC IP consumption (ADR-1 sizes subnets
+    # for exactly this).
+    count/pods: "100"
+    count/deployments.apps: {{ $.Values.namespaceQuota.maxDeployments | quote }}
+    count/statefulsets.apps: "10"
+    count/replicasets.apps: "50"
+    count/jobs.batch: "20"
+    count/cronjobs.batch: "10"
+    count/services: "20"
+
+    # --- exposure ----------------------------------------------------------
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata: { name: {{ . }}-limits, namespace: {{ . }} }
+spec:
+  limits:
+    - type: Container
+      # Karpenter sizes nodes from resource REQUESTS. A pod with none looks
+      # free, so Karpenter bin-packs it and it then fights real workloads for
+      # CPU and memory on a shared node. defaultRequest fixes the UNSET case.
+      defaultRequest: { cpu: 100m, memory: 128Mi, ephemeral-storage: 1Gi }
+      default:        { cpu: "1",  memory: 1Gi,   ephemeral-storage: 2Gi }
+      max:            { cpu: "4",  memory: 8Gi,   ephemeral-storage: 4Gi }
+      # `min` is what stops node-count amplification. defaultRequest applies
+      # ONLY when the field is unset — an explicit `cpu: 1m` is admitted without
+      # it. Combine that with a required podAntiAffinity on hostname (which
+      # phase-06's own example teaches, and which every "spread isn't working"
+      # answer online escalates to DoNotSchedule) and 50 replicas cost 50m of a
+      # 20-CPU quota while forcing 50 NODES — which consolidation can never
+      # reclaim, because the pods are structurally forbidden from sharing one.
+      # The NodePool limit caps vCPU, not node count.
+      min:            { cpu: 50m, memory: 64Mi }
+    - type: Pod
+      # The largest admissible pod must fit the largest launchable node
+      # (instance-cpu tops out at 16), or it is unschedulable forever.
+      max: { cpu: "8", memory: 16Gi }
+    - type: PersistentVolumeClaim
+      max: { storage: 50Gi }
+      min: { storage: 1Gi }
+{{- end }}
+```
+
+**Add a precondition tying the two lists together**, because the whole point is that access and
+governance cannot drift apart:
+
+```hcl
+lifecycle {
+  precondition {
+    # Every concrete namespace developers are granted access to must also be
+    # governed. Wildcards (team-*) cannot be created, so they are excluded from
+    # the check and must be governed by adding their real names here.
+    condition = length(setsubtract(
+      [for ns in var.developer_namespaces : ns if !strcontains(ns, "*")],
+      var.governed_namespaces,
+    )) == 0
+    error_message = "Every non-wildcard entry in developer_namespaces must appear in governed_namespaces, or developers get edit rights on an ungoverned namespace."
+  }
+}
+```
+
+### 5.3d The developer ClusterRole — what "zero trust" actually means here
+
+Phase 2 binds developers to the group `var.developer_rbac_group` and associates **no** AWS access
+policy. This chart supplies the permissions. Grant only what deploying and operating an application
+requires; everything omitted is omitted on purpose, and the omissions are the point.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.developerRbacGroup | replace ":" "-" }}
+rules:
+  # --- The job: ship and run a workload -------------------------------------
+  - apiGroups: ["apps"]
+    # deployments/rollback is deliberately absent — the subresource was removed
+    # from Kubernetes in 1.16 and granting it is dead weight.
+    resources: [deployments, replicasets, statefulsets,
+                deployments/scale, statefulsets/scale, replicasets/scale]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods, services, configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Observe your own workload --------------------------------------------
+  - apiGroups: [""]
+    resources: [pods/log, pods/status, events]
+    verbs: [get, list, watch]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: [pods]             # NOT nodes — cluster-scoped, see below
+    verbs: [get, list]            # kubectl top pods
+
+  # --- Follow the guidance we give them -------------------------------------
+  # The README tells developers to set a PodDisruptionBudget on a Spot cluster
+  # and phase-10 demos an HPA. Both must therefore be grantable.
+  - apiGroups: ["policy"]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Diagnose your own limits without opening a ticket ---------------------
+  - apiGroups: [""]
+    resources: [resourcequotas, limitranges]
+    verbs: [get, list, watch]
+
+  # --- Storage --------------------------------------------------------------
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # NOTE: storageclasses and metrics.k8s.io/nodes are CLUSTER-SCOPED. A
+  # ClusterRole bound by a RoleBinding cannot grant them — RBAC silently ignores
+  # such rules, so `kubectl get storageclass` is denied however it is written
+  # here. They are omitted rather than listed-and-dead. If developers need to
+  # read StorageClasses, that requires a separate, narrowly-scoped
+  # ClusterRoleBinding — a deliberate decision, not a line in this Role.
+  # The default StorageClass means they never have to name one.
+
+  # --- Debugging: a deliberate, bounded exception ---------------------------
+  # exec is genuinely needed to debug a container and is scoped to this
+  # namespace. Accept it knowingly: it lets a developer read any secret MOUNTED
+  # into any pod here, which is why per-team namespaces matter as soon as this
+  # carries more than one team's work.
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create, get]
+```
+
+**Bound to the group, per governed namespace** — a RoleBinding, so it cannot leak cluster-wide:
+
+```yaml
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: developers, namespace: {{ . }} }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole                       # cluster-scoped definition...
+  name: {{ $.Values.developerRbacGroup | replace ":" "-" }}
+subjects:
+  - kind: Group                           # ...namespace-scoped binding
+    name: {{ $.Values.developerRbacGroup }}
+    apiGroup: rbac.authorization.k8s.io
+{{- end }}
+```
+
+#### What is deliberately NOT granted, and why
+
+| Not granted | Reason |
+|---|---|
+| `secrets` (any verb) | Stops casual and accidental exposure: no `kubectl get secret`, no `-o yaml`, nothing in a shell history. **It does not stop a deliberate user** — see the boundary note below. AWS access comes from a Pod Identity association an operator creates; app secrets come from the platform team. |
+| `serviceaccounts` create / **impersonate** | `impersonate` is a direct escalation to any workload identity in the namespace. Pods use `default` or an operator-created SA. |
+| `daemonsets` | One pod per node, growing with the cluster; contrary to the intent of a per-namespace quota. |
+| `ingresses`, `services/proxy` | Exposure is an operator decision, consistent with `services.loadbalancers: 0` in the quota. |
+| `networkpolicies` | A developer must not be able to edit isolation. |
+| `roles`, `rolebindings` | Self-escalation. `AmazonEKSAdminPolicy` *does* grant these — though it withholds `escalate` and `bind`, so the API server's escalation-prevention check confines its holder to granting only what they already hold. Still more than a developer needs. |
+| Anything cluster-scoped — `nodes`, `namespaces`, `nodepools`, `ec2nodeclasses`, CRDs, webhooks | A RoleBinding cannot grant them, by construction. |
+
+#### What RBAC cannot reach — read this before trusting the table above
+
+Two things this Role **does not** prevent, both flowing from one grant: `pods: create` with an
+arbitrary pod spec.
+
+**1. A determined developer can read every Secret in the namespace.** Not via `kubectl get secret` —
+that is denied and the assertion below genuinely passes. Via the pod spec:
+
+```bash
+# Deployments are readable (granted), so secret NAMES are discoverable from
+# secretKeyRef / secretRef / volumes[].secret.secretName. `list` on secrets is
+# not needed.
+kubectl create -f - <<'EOF'   # then: kubectl logs exfil
+apiVersion: v1
+kind: Pod
+metadata: { name: exfil, namespace: demo }
+spec:
+  containers:
+    - name: c
+      image: public.ecr.aws/docker/library/busybox:latest
+      envFrom: [{ secretRef: { name: db-creds } }]
+      command: ["sh","-c","env"]
+EOF
+```
+
+Two minutes, no `exec`, no secrets verb. **There is no RBAC rule that fixes this**, because the
+authorization decision is on the *pod*, and the pod is legitimately theirs to create.
+
+**2. A Pod Identity association is namespace-wide, and keyed by ServiceAccount *name*.** The
+association is `(cluster, namespace, serviceAccountName)`. `spec.serviceAccountName` is an ordinary
+pod-spec field — there is **no authorization check** on a pod's reference to a ServiceAccount.
+Withholding `serviceaccounts: create` and `impersonate` does not close it. So the moment an operator
+creates the first Pod Identity association in a namespace, **every principal with pod-create rights
+in that namespace holds that IAM role.**
+
+**The boundary is the namespace, not the Role.** Consequences that are now non-negotiable:
+
+- A shared `demo` namespace is fine for a POC demo where nothing sensitive exists.
+- **One namespace per team** is required the moment two teams' work coexists — add each to *both*
+  `developer_namespaces` and `governed_namespaces` (the precondition enforces the pairing) and each
+  gets its own quota, LimitRange and PSA labels automatically.
+- **A dedicated namespace is a precondition for the first Pod Identity association**, not an
+  afterthought. Phase-06 §6.8 and operator-runbook §4 must say so.
+- If you must share a namespace and still constrain this, the in-tree tool is a
+  `ValidatingAdmissionPolicy` (GA since 1.30, no controller, no cost) restricting which Secrets a pod
+  may reference — the same reasoning that made PSA preferable to Kyverno.
+
+One property worth stating in the Role's favour: this design **fails closed**. If the chart has not
+applied, the access entry names a group with no RBAC and developers get nothing. The
+`AmazonEKSEditPolicy` design failed **open** — the association granted access whether or not the
+guardrails existed.
+
+**Verify the boundary rather than trusting it** — `kubectl auth can-i` evaluates real RBAC (unlike
+with AWS access policies, where it reports nothing):
+
+```bash
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create deployments -n demo   # yes
+kubectl auth can-i --as-group=opsfleet:developers --as=dev get secrets        -n demo   # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create daemonsets  -n demo   # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create rolebindings -n demo  # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev list pods          -n kube-system  # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev list nodes                    # no
+```
+
+Phase 8's `verify.sh` must assert all six. A permission boundary with no test is a claim.
 
 ### 5.4 What NOT to put in the pools
 
@@ -231,7 +525,7 @@ Without credentials:
 terraform fmt -check -recursive
 terraform validate
 
-cd modules/karpenter-resources
+cd modules/cluster-resources
 helm lint ./chart --set clusterName=test --set nodeIamRoleName=test-role
 
 # Render and eyeball the output — this catches most of the §8 footguns.
@@ -267,25 +561,15 @@ kubectl describe nodepool arm64 | tail -20   # Status must NOT report subnet/SG 
 
 # --- The actual proof -----------------------------------------------------
 #
-# SELF-CONTAINED ON PURPOSE. examples/namespace.yaml is a PHASE 6 artifact and
-# this phase only depends on Phase 4, so it does not exist yet — the namespace
-# is created inline here, WITH the Pod Security Admission labels.
-#
-# Do NOT substitute `kubectl create namespace demo`. That produces an
-# UNLABELLED namespace, which silently disables the control S-64 calls
-# API-server-enforced. If a pod below is rejected, fix the POD, not the
-# namespace.
-kubectl apply -f - <<'EOF'
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: demo
-  labels:
-    pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: v1.36
-    pod-security.kubernetes.io/audit: restricted
-    pod-security.kubernetes.io/warn: restricted
-EOF
+# The `demo` namespace already exists — THIS module created it (§5.3c) with its
+# PSA labels, ResourceQuota and LimitRange. Confirm, do not create:
+kubectl get ns demo -o jsonpath='{.metadata.labels}' | grep -q restricted \
+  && echo "PASS: governed namespace exists" || echo "FAIL: namespace missing or unlabelled"
+kubectl describe quota -n demo
+
+# Do NOT run `kubectl create namespace demo`. That produces an UNLABELLED,
+# unquota'd namespace and silently disables the control S-64 calls
+# API-server-enforced. If a pod below is rejected, fix the POD, not the namespace.
 
 # The `restricted` profile rejects any pod without this securityContext, and
 # busybox runs as root by default — hence runAsUser. A bare `kubectl run` with
@@ -402,7 +686,7 @@ Read these files first, in this order:
   5. docs/phases/phase-05-nodepools.md           (your specification)
   6. docs/phases/phase-04-karpenter-helm.md      (read its Completion report only)
 
-Implement modules/karpenter-resources/ (a local Helm chart plus a helm_release that
+Implement modules/cluster-resources/ (a local Helm chart plus a helm_release that
 installs it) exactly as phase-05 specifies, then wire it into main.tf.
 
 Critical constraints:

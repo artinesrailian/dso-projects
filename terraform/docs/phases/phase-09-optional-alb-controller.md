@@ -167,7 +167,10 @@ With credentials:
 terraform apply -var enable_aws_load_balancer_controller=true
 kubectl get deploy -n kube-system aws-load-balancer-controller     # 2/2 Ready
 
-kubectl apply -f examples/namespace.yaml -f examples/deployment-arm64.yaml -f examples/ingress-demo.yaml
+# NOTE: the demo namespace quota sets services.loadbalancers = 0. Raise it in
+# namespace_quota before this Ingress can provision anything — that gate is
+# deliberate (phase-05 §5.3c).
+kubectl apply -f examples/deployment-arm64.yaml -f examples/ingress-demo.yaml
 kubectl get ingress -n demo -w        # ADDRESS populates in 2-3 minutes
 aws elbv2 describe-load-balancers --query 'LoadBalancers[].{Name:LoadBalancerName,Scheme:Scheme}'
 # Scheme must be "internal"

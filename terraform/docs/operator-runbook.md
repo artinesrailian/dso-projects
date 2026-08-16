@@ -361,17 +361,25 @@ developer_principal_arns = [
 ]
 ```
 
-which produces an access entry associated with `AmazonEKSEditPolicy` scoped to `type = "namespace"`,
-`namespaces = ["demo"]`. The four available policies:
+which produces a `STANDARD` access entry bound to the Kubernetes group `opsfleet:developers`, with
+**no AWS managed access policy attached**. The permissions come from a ClusterRole this stack owns.
 
-| Policy | Grants |
-|---|---|
-| `AmazonEKSViewPolicy` | read-only |
-| `AmazonEKSEditPolicy` | create/update/delete workloads — **the right one for developers** |
-| `AmazonEKSAdminPolicy` | admin within scope |
-| `AmazonEKSClusterAdminPolicy` | full cluster admin — operators only |
+**That is deliberate.** `AmazonEKSEditPolicy` — the policy every tutorial reaches for — grants full
+CRUD on `secrets`, `serviceaccounts: impersonate`, `daemonsets: create` and `pods/exec`. In a shared
+namespace that means every developer can read every other developer's credentials and act as any
+workload identity. AWS's own guidance is to define RBAC objects and use group names when the managed
+policies do not fit; that is what this does. See phase-05 §5.3d for the exact rules and the list of
+what is deliberately withheld.
 
-Prefer SSO **roles** over IAM users in that list, so access follows your identity provider.
+Prefer SSO **roles** over IAM users in the list, so access follows your identity provider.
+
+Check the boundary yourself at any time — this works because it is real RBAC:
+
+```bash
+kubectl auth can-i --as-group=opsfleet:developers --as=probe create deployments -n demo  # yes
+kubectl auth can-i --as-group=opsfleet:developers --as=probe get    secrets     -n demo  # no
+kubectl auth can-i --as-group=opsfleet:developers --as=probe list   nodes                # no
+```
 
 Two caveats worth knowing before someone reports them as bugs:
 
@@ -381,13 +389,13 @@ Two caveats worth knowing before someone reports them as bugs:
 - Access policies are **not** a privilege-escalation boundary *within* their scope. A developer with
   edit access to a namespace can create a pod that mounts a service account. Namespace scoping
   limits blast radius; it does not sandbox a hostile user.
-- **Everyone sharing a namespace can see and change everyone else's work.** `AmazonEKSEditPolicy`
-  grants full CRUD on `secrets` plus `pods/exec`, `pods/attach` and `pods/port-forward` within
-  scope. Five developers sharing `demo` can each read the others' Secrets, exec into their pods, and
-  delete their Deployments. For a POC demo that is fine. **The moment this carries more than one
-  team's work, give each team its own namespace** — set `developer_namespaces` per group (the
-  wildcard form `team-*` works), and give each namespace its own ResourceQuota and the same Pod
-  Security labels as `demo`.
+- **Developers sharing a namespace can still delete each other's workloads, and `exec` into each
+  other's pods.** The custom Role withholds `secrets` entirely, so credentials are safe — but `exec`
+  is deliberately granted for debugging, and a shell in a pod can read any secret **mounted** into
+  it. Deployments, Services and ConfigMaps are shared-writable by design.
+  **The moment this carries more than one team's work, give each team its own namespace:** add them
+  to both `developer_namespaces` and `governed_namespaces` (a precondition enforces that pairing),
+  and each gets its own quota, LimitRange and PSA labels automatically.
 - There is **no NetworkPolicy**, so any pod can reach any other pod and the whole VPC. That is a
   documented non-goal, but read it against the access model above: the exclusion is justified as
   "single-tenant", and a namespace shared by 5-20 developers is only single-tenant in the sense that
@@ -435,15 +443,10 @@ aws ce get-cost-and-usage --time-period Start=2026-08-01,End=2026-08-31 \
   --filter '{"Tags":{"Key":"Project","Values":["opsfleet"]}}'
 ```
 
-> **One manual step Terraform cannot do for you:** cost allocation tags must be **activated** in
-> Billing before `Project`/`Environment` work as a Cost Explorer dimension or a budget filter. It is
-> once per account and takes up to 24 hours to take effect. Until then the budget filter matches
-> nothing and the spend looks untagged.
->
-> ```bash
-> aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
->   TagKey=Project,Status=Active TagKey=Environment,Status=Active
-> ```
+> **Terraform activates the cost allocation tags for you** (`aws_ce_cost_allocation_tag`, phase-00) —
+> this is *not* the manual Billing-console step most guides describe. But activation still takes up
+> to **24 hours** to take effect, so the budget filter matches nothing and spend looks untagged until
+> then. That is an AWS propagation delay, not a missing step.
 
 The biggest levers: `single_nat_gateway = true` (−$66/mo, single point of failure) and leaving
 `enable_vpc_endpoints = false` (the default — turning it on is +$263/mo).

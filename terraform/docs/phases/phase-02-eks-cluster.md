@@ -95,21 +95,15 @@ laptop hangs with no useful error.
         }
       }
     },
-    # Developers: edit rights, scoped to their namespaces only.
-    # This is the platform's whole point — a developer can deploy without an
-    # operator, and without cluster-admin.
+    # Developers: NO AWS managed access policy. The entry is STANDARD type with a
+    # kubernetes_groups binding, and the actual permissions come from a ClusterRole
+    # this stack defines (modules/cluster-resources). See the note below for why.
     {
       for arn in var.developer_principal_arns : "dev-${basename(arn)}" => {
-        principal_arn = arn
-        policy_associations = {
-          edit = {
-            policy_arn = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSEditPolicy"
-            access_scope = {
-              type       = "namespace"
-              namespaces = var.developer_namespaces
-            }
-          }
-        }
+        principal_arn     = arn
+        type              = "STANDARD"
+        kubernetes_groups = [var.developer_rbac_group]   # "opsfleet:developers"
+        # policy_associations intentionally EMPTY.
       }
     },
   )
@@ -131,11 +125,31 @@ exist in v21 — if you find yourself reaching for it, you are reading v20 docum
 identity that ran `terraform apply` has zero Kubernetes RBAC and the very first `kubectl get nodes`
 returns *"error: You must be logged in to the server (Unauthorized)"*.
 
-**On the developer entries.** EKS supports scoping an access policy to specific namespaces
-(`type = "namespace"`, with wildcards like `team-*` allowed; EKS does not verify the namespaces
-exist). The four policies are `AmazonEKSViewPolicy`, `AmazonEKSEditPolicy`, `AmazonEKSAdminPolicy`
-and `AmazonEKSClusterAdminPolicy`. Handing every developer cluster-admin is the default failure mode
-of a POC and is worth avoiding in two lines of HCL.
+**On the developer entries — why not `AmazonEKSEditPolicy`.**
+
+The obvious design is a namespace-scoped `AmazonEKSEditPolicy` association, and it is what most
+tutorials show. It is not least-privilege. AWS's published permission set for that policy grants,
+within the scoped namespace:
+
+| Granted | Why it fails a zero-trust bar |
+|---|---|
+| `secrets` — `create`,`delete`,`patch`,`update` **and** `get`,`list`,`watch` | Every developer can read every other developer's credentials in a shared namespace. |
+| `serviceaccounts` — `create` **and `impersonate`** | Impersonation lets a developer act as any ServiceAccount in the namespace, inheriting whatever RBAC that workload identity holds. |
+| `daemonsets` — `create` | One pod per node, scaling with the cluster. Legal under a namespace ResourceQuota but contrary to its intent, and it will chase Karpenter nodes as they appear. |
+| `pods/exec`, `pods/attach`, `pods/portforward`, `pods/proxy` | Shell into anyone's pod; read any secret mounted into it, bypassing the secrets rules entirely. |
+| `ingresses`, `networkpolicies` — `create`,`patch`,`delete` | Exposure and network isolation become developer-editable. |
+
+AWS documents the alternative explicitly: *"If the permissions in the access policies don't meet your
+needs, then create Kubernetes RBAC objects and specify group names for your access entries."*
+
+So the access entry is **`STANDARD` type with `kubernetes_groups`** and **no policy association**,
+and the permissions come from a ClusterRole this stack owns — see phase-05 §5.3d. The trade-off,
+stated plainly: an AWS managed policy is maintained by AWS and instantly recognisable to a reviewer;
+a custom Role is tighter but is yours to maintain. For a cluster whose entire selling point is that
+developers self-serve, tighter wins.
+
+`AmazonEKSClusterAdminPolicy` is still used for `cluster_admin_principal_arns` — operators need the
+breadth, and that list defaults to empty.
 
 Two behaviours to document rather than field as bug reports later:
 
@@ -537,8 +551,8 @@ tolerate it:
 Verification is one command, in the acceptance criteria below. If anything is stuck `Pending`,
 either add the toleration to that component or set `taint_bootstrap_nodes = false` and say so.
 
-**The taint is a scheduling convention, not a security boundary.** `AmazonEKSEditPolicy` lets any
-developer write an arbitrary pod spec, and two lines —
+**The taint is a scheduling convention, not a security boundary.** The developer Role permits
+arbitrary pod specs, and two lines —
 `tolerations: [{key: CriticalAddonsOnly, operator: Exists}]`, widely copy-pasted from tutorials —
 put their workload next to the Karpenter controller and CoreDNS on the On-Demand bootstrap nodes.
 Nothing enforces the separation. Say this in the README rather than describing the taint as though

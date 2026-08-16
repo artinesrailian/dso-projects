@@ -125,7 +125,6 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=200 \
 This is the section that matters most. Do not shortcut it:
 
 ```bash
-kubectl apply -f examples/namespace.yaml
 kubectl apply -f examples/deployment-arm64.yaml
 kubectl wait --for=condition=available --timeout=10m deployment/web-graviton -n demo
 
@@ -134,6 +133,68 @@ ARCH=$(kubectl get pods -n demo -l app=web-graviton -o jsonpath='{.items[0].spec
 [ "$ARCH" = "arm64" ] && echo "PASS: Graviton scheduling" || { echo "FAIL: got $ARCH"; exit 1; }
 
 # and the same for amd64 with deployment-x86.yaml
+```
+
+**D2. The developer permission boundary actually holds**
+
+`kubectl auth can-i` evaluates real RBAC, so unlike AWS access policies this boundary is testable.
+Assert both directions — a boundary tested only for what it denies can be denying everything.
+
+```bash
+G="--as-group=$(terraform output -raw developer_rbac_group) --as=ci-probe"
+NS=demo
+# MUST be allowed
+for r in "create deployments" "delete pods" "create horizontalpodautoscalers" "get resourcequotas"; do
+  kubectl auth can-i $G $r -n $NS | grep -qx yes || fail "developer cannot $r"
+done
+# MUST be denied
+for r in "get secrets" "create serviceaccounts" "create daemonsets" "create rolebindings" "create ingresses"; do
+  kubectl auth can-i $G $r -n $NS | grep -qx no  || fail "developer CAN $r"
+done
+# MUST be denied outside their namespace and cluster-wide
+kubectl auth can-i $G list pods -n kube-system | grep -qx no || fail "developer can read kube-system"
+kubectl auth can-i $G list nodes              | grep -qx no || fail "developer can list nodes"
+kubectl auth can-i $G get nodepools.karpenter.sh | grep -qx no || fail "developer can read NodePools"
+```
+
+**D2b. The one alarm is actually able to fire**
+
+S-29 claims a confirmed subscription and a working detector. Both halves can be silently dead:
+
+```bash
+# SNS returns the literal "PendingConfirmation" in place of an ARN until somebody
+# clicks the link in the email. An unconfirmed topic is a silent alarm.
+aws sns list-subscriptions-by-topic --topic-arn "$TOPIC" \
+  --query 'Subscriptions[?Protocol==`email`].SubscriptionArn' --output text \
+  | grep -qv PendingConfirmation || fail "SNS subscription never confirmed — CMK alarm cannot notify"
+
+# The KMS alarm is an EventBridge rule on CloudTrail events. No trail, no events,
+# no alarm — and nothing else in this build would tell you.
+[ "$(aws cloudtrail describe-trails --query 'length(trailList)' --output text)" != "0" ] \
+  || fail "no CloudTrail — the CMK alarm can never fire"
+```
+
+**D3. The guardrails exist and are Terraform-owned**
+
+```bash
+kubectl get ns "$NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' \
+  | grep -qx restricted || fail "namespace not PSA-restricted"
+kubectl get resourcequota -n "$NS" -o name | grep -q . || fail "no ResourceQuota"
+kubectl get limitrange    -n "$NS" -o name | grep -q . || fail "no LimitRange"
+# The quota must block self-service public exposure
+kubectl get resourcequota -n "$NS" -o jsonpath='{.items[0].spec.hard.services\.loadbalancers}' \
+  | grep -qx 0 || fail "loadbalancer quota is not 0"
+```
+
+**D4. The quota REQUEST is not the quota** — phase-00 opens increase requests, but approval is
+asynchronous. Assert the effective value, not that Terraform applied:
+
+```bash
+for q in L-1216C47A L-34B43A08; do
+  V=$(aws service-quotas get-service-quota --service-code ec2 --quota-code $q --query 'Quota.Value' --output text)
+  awk -v v="$V" 'BEGIN{exit !(v+0 >= 104)}' \
+    && pass "quota $q = $V" || fail "quota $q is $V — increase not yet approved"
+done
 ```
 
 **E. Spot is actually being used**
@@ -208,6 +269,19 @@ fi
 
 echo "==> 4/6 terraform destroy"
 terraform destroy -auto-approve
+
+echo "==> 4b/6 Sweeping EBS volumes left by PVCs"
+# StatefulSet volumeClaimTemplates are RETAINED by default when the workload is
+# deleted, and dynamically-provisioned PVs are invisible to Terraform. Left
+# alone, the spend outlives the cluster — gp3 is ~$0.08/GiB-month forever.
+aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag:kubernetes.io/cluster/$CLUSTER,Values=owned" "Name=status,Values=available" \
+  --query 'Volumes[].VolumeId' --output text | tr '\t' '\n' | grep -v '^$' \
+  | xargs -r -I{} aws ec2 delete-volume --region "$REGION" --volume-id {}
+# Also check for volumes tagged by the CSI driver but not the cluster tag:
+aws ec2 describe-volumes --region "$REGION" \
+  --filters "Name=tag:ebs.csi.aws.com/cluster,Values=true" "Name=status,Values=available" \
+  --query 'Volumes[].{id:VolumeId,size:Size,name:Tags[?Key==`CSIVolumeName`]|[0].Value}' --output table
 
 echo "==> 5/6 Sweeping launch templates Karpenter created outside Terraform state"
 aws ec2 describe-launch-templates --region "$REGION" \

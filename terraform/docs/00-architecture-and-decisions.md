@@ -202,7 +202,7 @@ token is persisted into state, expires in 15 minutes, and causes intermittent 40
 | `kubectl_manifest` (third-party provider) | **Rejected.** Works, but adds an unofficial provider dependency to a security-sensitive stack. |
 | `helm_release` pointing at a local chart | **Chosen.** No extra provider, ordering handled by `depends_on` the Karpenter release, and `helm uninstall` removes the CRs cleanly on destroy — which matters, because orphaned NodePools with finalizers are a classic `terraform destroy` hang. |
 
-The chart is a thin wrapper: `modules/karpenter-resources/chart/` with templates for the NodePools
+The chart is a thin wrapper: `modules/cluster-resources/chart/` with templates for the NodePools
 and the EC2NodeClass, and values fed from Terraform.
 
 ### ADR-8 — S3 backend with native locking

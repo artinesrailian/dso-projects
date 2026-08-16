@@ -67,10 +67,9 @@ terraform/                            # ← working directory; everything below 
 │   ├── network/                      # Phase 1
 │   ├── eks/                          # Phase 2
 │   ├── karpenter/                    # Phase 3 + 4 (AWS-side IAM/SQS + Helm release)
-│   └── karpenter-resources/          # Phase 5 (NodePool / EC2NodeClass CRs)
+│   └── cluster-resources/          # Phase 5 (NodePool / EC2NodeClass CRs)
 │       └── chart/                    # local Helm chart holding the Karpenter CRs
 └── examples/                         # Phase 6 — developer-facing demo manifests
-    ├── namespace.yaml
     ├── deployment-x86.yaml
     ├── deployment-arm64.yaml
     ├── deployment-multiarch.yaml
@@ -193,8 +192,10 @@ constrained ones carry a `validation` block.
 | `cluster_enabled_log_types` | `list(string)` | `["api","audit","authenticator","controllerManager","scheduler"]` | |
 | `cluster_log_retention_days` | `number` | `90` | 90 is the module default, not an AWS recommendation. Drop to `7` for a POC. |
 | `cluster_admin_principal_arns` | `list(string)` | `[]` | IAM principals granted **cluster-admin** via EKS access entries. Operators only. |
-| `developer_principal_arns` | `list(string)` | `[]` | IAM principals granted `AmazonEKSEditPolicy` **scoped to `var.developer_namespaces`** — the least-privilege path for application developers. Prefer SSO role ARNs over IAM users. |
-| `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the above are scoped to. Wildcards work (`team-*`); EKS does not validate that they exist. |
+| `developer_principal_arns` | `list(string)` | `[]` | IAM principals bound to the `developer_rbac_group` Kubernetes group via a `STANDARD` access entry with **no AWS managed access policy**. Permissions come from the ClusterRole in phase-05 §5.3d. Prefer SSO role ARNs over IAM users. |
+| `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the access entries are **scoped to**. Wildcards work (`team-*`); EKS does not validate they exist. |
+| `governed_namespaces` | `list(string)` | `["demo"]` | Namespaces Terraform **creates** with PSA `restricted` labels, a ResourceQuota and a LimitRange. Every non-wildcard entry in `developer_namespaces` must appear here — enforced by a precondition, because access without guardrails is the failure mode. |
+| `namespace_quota` | `object` | cpu 20 / mem 40Gi requests, 40 / 80Gi limits, 20 deployments, 0 loadbalancers | Per-namespace ResourceQuota. `services.loadbalancers = 0` stops a developer provisioning a public load balancer. |
 | **Karpenter** ||||
 | `karpenter_version` | `string` | see `reference/version-pinning.md` | Helm chart version. |
 | `karpenter_namespace` | `string` | `"kube-system"` | |
@@ -204,7 +205,10 @@ constrained ones carry a `validation` block.
 | `bootstrap_node_max_size` | `number` | `3` | |
 | `bootstrap_node_desired_size` | `number` | `2` | Note: the EKS module **ignores** changes to this after creation (see `reference/gotchas.md` G-06). |
 | `taint_bootstrap_nodes` | `bool` | `true` | Taints the bootstrap group `CriticalAddonsOnly=true:NoSchedule` so user workloads only land on Karpenter nodes. |
-| `create_spot_service_linked_role` | `bool` | `false` | Default off: the resource **fails** on any account that already has `AWSServiceRoleForEC2Spot`, which is the common case. |
+| `create_spot_service_linked_role` | `bool` | `true` | Creates/adopts `AWSServiceRoleForEC2Spot` so a fresh account needs no manual step. See phase-03 for the idempotency handling. |
+| `request_service_quotas` | `bool` | `true` | Opens vCPU quota-increase requests in code (P3). Approval is asynchronous — apply success ≠ quota raised. |
+| `vcpu_quota_target` | `number` | `128` | Must exceed `nodepool_cpu_limit` + the bootstrap group, or the account quota becomes the real ceiling. |
+| `developer_rbac_group` | `string` | `"opsfleet:developers"` | Kubernetes group bound to the developer ClusterRole. Access entries reference it via `kubernetes_groups`; **no AWS managed access policy is associated.** |
 | **NodePools** ||||
 | `nodepool_cpu_limit` | `number` | `100` | Total vCPU ceiling across all Karpenter NodePools. **Karpenter's `spec.limits` is per-NodePool**, so Phase 5 divides this by the number of enabled pools — with both on, each pool gets 50. The blast-radius cap. |
 | `nodepool_memory_limit_gi` | `number` | `400` | Same, for memory. A cpu-only limit lets a memory-heavy workload provision far more instance than intended. |
@@ -242,6 +246,7 @@ Any phase adding a variable adds a row here **in the same change**.
 | `karpenter_controller_iam_role_arn` | Role assumed by the Karpenter controller. |
 | `karpenter_interruption_queue_name` | SQS queue for Spot interruption / rebalance events. |
 | `configure_kubectl` | Ready-to-run string: `aws eks update-kubeconfig --region <r> --name <n>`. |
+| `developer_rbac_group` | The Kubernetes group developers are bound to. Consumed by `verify.sh`'s `kubectl auth can-i --as-group` assertions. |
 
 ---
 
@@ -318,7 +323,7 @@ signature exactly, because a later phase is already written against it.
 | out | `namespace` | `string` |
 | out | `helm_release_name` | `string` — later phases `depends_on` this to order CR creation after the CRDs exist |
 
-### 5.4 `modules/karpenter-resources` — Phase 5
+### 5.4 `modules/cluster-resources` — Phase 5
 
 | Direction | Name | Type |
 |---|---|---|
@@ -331,8 +336,12 @@ signature exactly, because a later phase is already written against it.
 | in | `default_arch` | `string` — `arm64` or `amd64`; decides the NodePool weights |
 | in | `enable_amd64` | `bool` |
 | in | `enable_arm64` | `bool` |
+| in | `governed_namespaces` | `list(string)` |
+| in | `developer_rbac_group` | `string` — the group the developer ClusterRole is bound to |
+| in | `namespace_quota` | `object` |
 | in | `karpenter_helm_release_name` | `string` — used only as a `depends_on` edge so the CRDs exist first |
 | out | `storage_class_name` | `string` — the default `gp3` StorageClass this chart also delivers (see phase-02 §2.5b) |
+| out | `governed_namespace_names` | `list(string)` — namespaces created with PSA labels, quota and limit range |
 | out | `nodepool_names` | `list(string)` |
 | out | `ec2nodeclass_name` | `string` |
 

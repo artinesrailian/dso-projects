@@ -50,6 +50,7 @@ bootstrap/variables.tf
 bootstrap/main.tf
 bootstrap/outputs.tf
 budget.tf
+quotas.tf
 bootstrap/README.md
 ```
 
@@ -353,14 +354,56 @@ resource "aws_budgets_budget" "account_backstop" {
 Note in the README that AWS Budgets refreshes cost data only 1–3 times a day, so neither budget is a
 real-time control. They catch a forgotten cluster, not a runaway loop.
 
-Two things to document in the README rather than pretend Terraform handles:
+**Activate the cost allocation tags in Terraform — do not document it as a manual step.** The AWS
+provider has a resource for it, so the "one-time Billing console click" every guide describes is
+avoidable:
 
-1. **Cost allocation tags must be activated in Billing** before `Project`/`Environment` work as a
-   budget filter or a Cost Explorer dimension. It is a one-time per-account step
-   (`aws ce update-cost-allocation-tags-status`, or the Billing console) and it can take up to 24
-   hours to take effect. Until then the filter matches nothing.
-2. **Karpenter-launched instances only carry these tags because Phase 5 puts them in
-   `EC2NodeClass.spec.tags`.** The provider's `default_tags` never sees them.
+```hcl
+resource "aws_ce_cost_allocation_tag" "project" {
+  tag_key = "Project"
+  status  = "Active"
+}
+
+resource "aws_ce_cost_allocation_tag" "environment" {
+  tag_key = "Environment"
+  status  = "Active"
+}
+```
+
+Two caveats that stay true even automated, and belong in the README: activation can take **up to 24
+hours** to take effect, so the budget filter matches nothing until then; and Karpenter-launched
+instances only carry these tags because Phase 5 renders them into `EC2NodeClass.spec.tags` — the
+provider's `default_tags` never reaches them.
+
+### 0.7c `quotas.tf` — request the vCPU increases in code
+
+Prerequisite P3 is the most likely thing to break a first deploy, and it does not have to be a
+human reading a runbook:
+
+```hcl
+# Both default to 5 vCPU on a new account and are SEPARATE quotas.
+# nodepool_cpu_limit (100) + the bootstrap group (4) is the real requirement.
+resource "aws_servicequotas_service_quota" "ondemand_standard" {
+  count        = var.request_service_quotas ? 1 : 0
+  service_code = "ec2"
+  quota_code   = "L-1216C47A"   # Running On-Demand Standard instances
+  value        = var.vcpu_quota_target
+}
+
+resource "aws_servicequotas_service_quota" "spot_standard" {
+  count        = var.request_service_quotas ? 1 : 0
+  service_code = "ec2"
+  quota_code   = "L-34B43A08"   # All Standard Spot Instance Requests
+  value        = var.vcpu_quota_target
+}
+```
+
+**Understand what this resource does before relying on it.** It opens a quota *increase request*.
+Approval is asynchronous and may be automatic, delayed by hours, or refused — so `terraform apply`
+succeeding does **not** mean the quota is raised. It is strictly better than a runbook step (it is
+recorded, repeatable and reviewable), but Phase 8's `verify.sh` must still assert the *effective*
+quota with `get-service-quota` before declaring the cluster ready. Default `request_service_quotas`
+to `true` and document that a refusal needs a support ticket.
 
 ### 0.8 `main.tf` and `outputs.tf`
 
@@ -369,7 +412,7 @@ Header comment only. Something like:
 ```hcl
 # Root composition. Module blocks only — no resources.
 # Phase 1 adds module.network, Phase 2 module.eks, Phases 3-4 module.karpenter,
-# Phase 5 module.karpenter_resources.
+# Phase 5 module.cluster_resources.
 ```
 
 ### 0.10 `Makefile` — the operator's entry point
@@ -447,8 +490,7 @@ verify:
 	./scripts/verify.sh
 ## demo: run the Graviton + x86 demo and report where each pod landed
 demo:
-	kubectl apply -f examples/namespace.yaml
-	kubectl apply -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml
+		kubectl apply -f examples/deployment-arm64.yaml -f examples/deployment-x86.yaml
 	kubectl wait --for=condition=available --timeout=10m deployment/web-graviton deployment/web-x86 -n demo
 	kubectl get pods -n demo -o wide
 	kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernetes.io/instance-type
