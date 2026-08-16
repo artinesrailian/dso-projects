@@ -19,7 +19,7 @@ real.
 | Does it open with a summary a founder could read? | An executive summary with no unexplained jargon |
 | Is the reasoning visible, not just the conclusions? | A decision register appendix, and alternatives named inline |
 | Is it recognisably a Well-Architected design? | A pillar chapter, and pillar tags on the sections |
-| Is it the right length? | Roughly 9 000–12 000 words total (`style-guide.md` §6). Substantial but finite — filler scores worse than a tight document |
+| Is it the right length? | Roughly 13 000–15 500 words total (`style-guide.md` §6). Substantial but finite — filler scores worse than a tight document |
 | Does it look like one author wrote it? | Consistent names, consistent voice, no seams |
 
 **Failure modes that end the review early:** a broken Mermaid block; a missing assessment area; two
@@ -40,7 +40,10 @@ Each is scored `weak` / `adequate` / `strong`. Phase 13 must reach `strong` on e
       *image building AND registry AND deployment*, *backups AND high availability AND disaster
       recovery as three distinct things*.
 - [ ] Deliverable at `architecture/README.md`; the HLD requirement satisfied.
-- [ ] The traceability table (R1–R28) is present and every row points at a real section.
+- [ ] Every R1–R28 requirement is satisfied by a real section of the body, §10, or Appendix B —
+      checked directly against the text, not against a standalone traceability table. (The original
+      Appendix A traceability table was removed by explicit human instruction on 2026-08-16 — see
+      `STATE.md`'s *Plan amendments* — and is not part of this deliverable.)
 
 ### B. Justification quality — **the dimension that separates candidates**
 

@@ -188,7 +188,8 @@ Read as a principal engineer looking for something to object to. Check specifica
 - [ ] No emoji
 - [ ] Every table has a header and an alignment row
 - [ ] Every internal anchor resolves; the table of contents matches the headings
-- [ ] Total length 9 000–12 000 words: body §0–§10 at 4 800–6 500, Appendix B at 2 000–2 500
+- [ ] Total length 13 000–15 500 words: body §0–§10 at 8 000–9 500, Appendix B prose (excluding its
+      two tables per record) at 2 000–2 500 — counted with the pinned method in `style-guide.md` §6
 - [ ] Search for and eliminate: `TODO`, `TBD`, `XXX`, `FIXME`, `???`, `<!-- EXEC-SUMMARY`, `Lorem`,
       `placeholder`, `[insert`, `TBC`, `<fill`, any heading with no body, any "see above" pointing at
       nothing, and any leftover instruction text copied from a phase document

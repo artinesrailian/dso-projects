@@ -145,6 +145,13 @@ Root
 └── Suspended                 → decommissioned accounts, deny-all SCP
 ```
 
+> **Lean-start exception.** The account table above is the recommended, day-1 structure and is
+> unchanged by this note. Only the lean-start variant priced in §11 deviates from it: there,
+> `innovate-dev` and `innovate-staging` merge into one account, `innovate-dev-staging`, running one
+> EKS cluster isolated by namespace rather than by account — because an EKS cluster cannot span two
+> AWS accounts, "share one cluster" necessarily means "share one account" too. This is an explicit,
+> disclosed trade-off of the cheaper variant, not a change to the primary recommendation.
+
 ### SCP guardrails to cite (name at least these six)
 
 1. Deny use of the account root user except for documented break-glass.
@@ -341,9 +348,9 @@ List price basis, `us-east-1`, day-1 footprint (a few hundred users/day), **all 
 | CloudWatch / logs / metrics | ~$60 | Grows with log volume — set retention deliberately |
 | GuardDuty / Security Hub / Config / Inspector | ~$70 | The price of the security posture; call it out honestly |
 | **Total** | **≈ $850 – 900 / month** | |
-| **Lean-start variant** | **≈ $400 – 450 / month** | Dev+staging share one cluster, single NAT everywhere, no reader replica in non-prod, in-cluster Prometheus instead of AMP/AMG |
+| **Lean-start variant** | **≈ $400 – 450 / month** | Dev and staging merge into a single AWS account, `innovate-dev-staging`, sharing one EKS cluster (isolated by namespace instead of by account); single NAT everywhere; no reader replica in non-prod; in-cluster Prometheus instead of AMP/AMG |
 
-### Cost trajectory anchors (for the growth-stage projections in §8.3)
+### Cost trajectory anchors (for the growth-stage projections in §7.3)
 
 Same caveat as above — these are **shape, not precision**. What matters to the client is the *curve*:
 fixed costs dominate at launch, so cost per user falls steeply through the first order of magnitude
@@ -382,6 +389,7 @@ Values invented by phase agents because they were absent above. **Append only.**
 | 03 | Kubernetes minor-version upgrade SLA | Within 30 days of a new minor reaching general availability | §6 fixes the version *policy* (latest EKS-supported minor, or N-1) but not a cadence for acting on it; this phase's own instructions (`phases/phase-03-compute-eks.md`) specify the 30-day figure, needed so `## Cluster topology` states an operational commitment rather than an open-ended one. |
 | 04 | Argo Rollouts canary steps | 10% → analysis → 50% → analysis → 100% | §7 fixes "prod canary via Argo Rollouts" as the mechanism but not its traffic-weight steps; a concrete step sequence is needed so `## Deployment — CI/CD and GitOps` can describe how the AWS Load Balancer Controller's two target-group weighting actually progresses, rather than asserting a canary exists without saying what it does. |
 | 05 | Staging Aurora topology | Writer + 1 reader, mirroring production at reduced capacity | §8's Topology row distinguishes only "(prod)" and "Dev:", leaving staging's topology unstated. §4's account table describes `innovate-staging` as a "Pre-production mirror of prod topology at reduced size," and §11's lean-start variant separately lists "no reader replica in non-production" as a cost-saving lever — implying the baseline (non-lean) non-production configuration does have one — so staging is given production's writer+reader shape rather than dev's writer-only shape, needed for the Configuration table's Non-production column in `05-database.md`. |
+| 13 | Lean-start merged account name | `innovate-dev-staging` | §11's lean-start variant merges `innovate-dev` and `innovate-staging` into one account so they can share one EKS cluster (a cluster cannot span two AWS accounts — see the Lean-start exception note under §4). §2's naming convention enumerates `dev` and `stg` as separate environment values but has no combined form; `dev-staging` follows the same lowercase, hyphen-separated pattern and is used only in the lean-start variant's description, never for the primary recommendation. |
 
 ---
 

@@ -27,9 +27,10 @@ Statuses: `todo` → `in-progress` → `done`. Also allowed: `blocked`, `needs-r
 | 10 | Diagrams | `done` | 01–09 | `../diagrams/01…05` | — |
 | 11 | Body assembly | `done` | 00–10 | `../README.md` §0–§9 | — |
 | 12 | Summary, decision register & appendices | `done` | 11 | `../README.md` complete | collects all |
-| 13 | QA, consistency audit & final polish | `todo` | 12 | corrected `../README.md` | — |
+| 13 | QA, consistency audit & final polish | `done` | 12 | corrected `../README.md` | — |
 
-**Next phase to run:** `13`
+**Next phase to run:** none — all 14 phases (00–13) are `done`. The deliverable at `../README.md` is
+final.
 
 ---
 
@@ -115,6 +116,40 @@ several) still points at the correct thing, since Appendix B itself was not rele
 completion report and word counts (below) reflect the document as it now stands, after both removals
 and the rename.
 
+### 2026-08-16 — Phase 13: word-budget ceiling raised; lean-start account/cluster contradiction resolved
+
+The human directing this work answered both `STATE.md` *Open questions* Phase 11/12 raised, before
+Phase 13's audit ran, so the audit checked against final rules rather than ones already known to be
+wrong.
+
+- **Word budget raised to match measured reality**, not cut to force a fit. `style-guide.md` §6,
+  `rubric.md` §1, and `phases/phase-13-qa-and-final.md`'s own acceptance criterion are all updated:
+  body (§0–§10) **8,000–9,500** words (was 4,800–6,500), Appendix B prose **2,000–2,500** words
+  excluding its two tables per record (unchanged — it was already compliant), total document
+  **13,000–15,500** words (was 9,000–12,000). Every required subsection, every required table, and
+  the full nine-ADR Appendix B stay exactly as scoped — nothing was cut to chase a number. `style-
+  guide.md` §6 now also pins two distinct, precisely-specified word-counting procedures (document/
+  section length vs. the stricter per-ADR 250-word cap) to close a three-way disagreement on record
+  between Phase 01, Phase 03, Phase 11, and Phase 12's independently-computed counts for the same
+  text.
+- **The lean-start variant's "dev+staging share one cluster" claim is now technically coherent.**
+  `contract.md` §11's lean-start row and a new "Lean-start exception" note under §4 both now state
+  plainly that this variant merges `innovate-dev` and `innovate-staging` into a single account,
+  `innovate-dev-staging`, running one EKS cluster isolated by Kubernetes namespace instead of by
+  account — since an EKS cluster cannot span two AWS accounts, "share one cluster" necessarily meant
+  "share one account" too, which the pre-Phase-13 text never said. `contract.md` §12's Extensions
+  register records the new account name. `README.md` §7.2's lever table and prose, and ADR-029's
+  Context/Why/Consequences fields, were rewritten to match. The primary, day-1 recommendation
+  (`contract.md` §4's seven-account table, `README.md` §1.2 and §3.2) is **unchanged** — the merge
+  applies only to the documented cheaper alternative.
+- Also fixed as part of the same decision: `contract.md` §11's stale "§8.3" self-reference, corrected
+  to "§7.3" (the table actually landed there per Phase 09/11's own prediction, logged as a cross-phase
+  issue and left open until now).
+
+**Scope of this change:** `style-guide.md`, `rubric.md`, `contract.md`, `phases/phase-13-qa-and-
+final.md`, and `README.md`. Drafts 00–08 are untouched — this amends only the assembled deliverable
+and the normative files that grade it, consistent with the 2026-08-14 amendment's own precedent.
+
 ---
 
 ## ADR ledger
@@ -165,6 +200,252 @@ cannot fill its block says so here rather than leaving a silent hole.
 ```
 
 <!-- Append completion reports below this line -->
+
+### Phase 13 — QA, consistency audit & final polish
+- Completed:      2026-08-16
+- Files written:  `../README.md` (edited — surgical fixes only, no section rewritten wholesale),
+  `../diagrams/01-high-level.md` (edited — one `class` statement and one legend row, to fix a
+  tier-miscoloring defect also present in the README's embedded copy; kept byte-identical to it),
+  `_plan/STATE.md` (this file — phase board, two Open questions, fourteen Cross-phase issues, this
+  report), `_plan/contract.md` (§4 lean-start exception note, §11 lean-start line + stale
+  cross-reference, §12 Extensions register), `_plan/style-guide.md` (§6 word budgets + two pinned
+  counting methods), `_plan/rubric.md` (§1 length line, §2.A traceability-table line),
+  `_plan/phases/phase-13-qa-and-final.md` (its own word-budget acceptance line), `_plan/well-
+  architected.md` (§4 stale cross-reference), `_plan/phases/phase-00-preflight-and-scope.md` (§3
+  stale cross-reference).
+- Word count:     Final `README.md`, pinned method (variant 1, `style-guide.md` §6): **15,076 total**
+  (budget 13,000–15,500 — inside, 424 words of headroom); **body §0–§10: 9,348** (budget 8,000–9,500 —
+  inside, 152 words of headroom); Executive Summary 797; Appendix A (Glossary) 586; Appendix B
+  (prose + both tables per record) 4,345. Every one of the nine promoted ADRs recounted individually
+  with the stricter per-ADR method (variant 2 — heading and both tables excluded) and confirmed at or
+  under the 250-word cap: ADR-001 240, ADR-004 250, ADR-007 248, ADR-011 248, ADR-017 244, ADR-019
+  249, ADR-023 239, ADR-026 250, ADR-029 242. Four of the nine (007, 011, 026, 029) were over cap
+  before this phase's fixes and were trimmed with surgical cuts to Context/Why/Consequences/Revisit
+  fields — no required content dropped, only compressed.
+- ADRs written:   none — this phase edits, it does not author. No ADR numbers used or reserved.
+- Pillars tagged: Added one pillar line that was genuinely missing (Executive Summary: `Security ·
+  Reliability · Cost Optimization`) — the one content-adjacent chapter this phase's audit found
+  without one. Confirmed, did not add, that §10 (Summary of Key Decisions), Appendix A (Glossary), and
+  Appendix B (Architecture Decision Records) correctly carry no pillar line, as summary/reference
+  chapters rather than content chapters the tagging convention was written against — independently
+  corroborated by the Pass 4 audit agent, not just asserted. Confirmed §9's chapter-level 4-pillar line
+  (of 6 pillars discussed across its six dedicated subsections) is consistent with the 2–4 cap, not an
+  exception to it, closing the open question Phase 09/11 left unadjudicated.
+- Key decisions:
+  1. Before running the nine audit passes, surfaced the two `STATE.md` *Open questions* explicitly
+     reserved for the human (word-budget ceiling; the lean-start dev/staging-merge contradiction) via
+     `AskUserQuestion` rather than adjudicating either unilaterally — both are marked in this file as
+     "the human answers these," and both required editing normative files (`style-guide.md`,
+     `rubric.md`, `contract.md`), not just the deliverable. Applied both answers (raise the ceiling to
+     match measured reality; merge dev+staging into one account for lean-start) before the audit ran,
+     so all nine passes checked against final rules instead of ones already known to be about to
+     change — avoiding a second audit round.
+  2. Ran Passes 1–8 as eight independent, read-only, parallel agents (via the Workflow tool) rather
+     than one sequential read, per this phase document's own "a single read finds a third of the
+     problems" warning and `AGENT-PROTOCOL.md`'s general instruction to keep separate concerns
+     separate. Each returned structured findings with file, line, severity, and a verbatim quote, so
+     every fix in this report traces to a specific, checkable claim rather than a paraphrase. All
+     fixes were then applied by a single writer (this session, sequentially) to avoid the concurrent-
+     edit conflicts that would result from letting multiple agents edit `README.md` at once — one
+     audit agent (Pass 8) independently flagged that the file *was* changing under it mid-run, from
+     this session's own concurrent manual fixes (the lean-start/§10.7/ADR-trim edits, done in parallel
+     with the audit to save time), and correctly treated its own possibly-stale earlier reads with
+     appropriate caution; every finding from every pass was re-verified against the current file text
+     before being applied, not applied blindly.
+  3. Overrode one of Phase 12's own explicit editorial choices: ADR-001's `Section` field, which
+     Phase 12 deliberately left at chapter level (`§0`) reasoning the choice was intentional and
+     unflagged. Pass 3's audit found this inconsistent with all eight other promoted ADRs (which cite
+     subsection level) and the actual AWS-vs-GCP argument's real location (`§0.1`, not `§0` as a
+     whole). Judged this a legitimate QA-stage tightening — final authority sits with Phase 13, the
+     fix is strictly more precise with no downside, and "an earlier phase considered and rejected this"
+     is not the same as "an earlier phase adjudicated this against the rubric's own consistency bar."
+     Changed to `§0.1 Scope and objectives` in both the ADR's own metadata table and the Appendix B
+     index table.
+  4. Found and fixed one severe, previously-undetected factual bug no earlier phase's fix-pass caught:
+     §4.2's migrations sentence read "migrations run under a separate role that cannot run DDL" —
+     inverted from `drafts/05-database.md`'s original, correct meaning (the *app's* role cannot run
+     DDL; the *migration* role can, which is the only way it could run a migration at all). Verified
+     directly against the source draft before fixing, not just trusted the audit agent's claim.
+  5. Found and fixed a genuine diagram-accuracy defect the Mermaid-syntax check (Pass 6, clean) could
+     not have caught because it was never a syntax problem: the HLD's `class` statement colored the
+     Application Load Balancer as part of the Presentation tier (orange), contradicting `contract.md`
+     §1a's explicit "the application tier's load balancer" and the README's own Executive Summary
+     prose and §2.2 legend. Fixed in both `README.md`'s embedded copy and `diagrams/01-high-level.md`
+     (moved `alb` from the `edge` class to the `compute` class, reworded both affected legend rows),
+     and re-diffed the two files' Mermaid blocks and legend tables after the fix to confirm they are
+     still byte-identical, per this phase's own "fix in both, or they diverge" instruction.
+  6. Left three findings deliberately unfixed, each recorded as an accepted trade-off rather than
+     silently dropped: (a) Aurora's short form ("Amazon Aurora") appears in the title/subtitle and
+     Executive Summary prose before its `contract.md` §13-mandated full form ("Amazon Aurora
+     PostgreSQL-Compatible Edition") is first spelled out in §4.1 — accepted as a defensible
+     readability exception for front-matter and a founder-facing summary, the same treatment already
+     given to diagram labels elsewhere in this plan; (b) the `well-architected.md` §3-sourced
+     $25–60/month-per-account figure inside the locked-verbatim §9.7 trade-off table was **not**
+     given an "(indicative)" label, even though its three other occurrences in the body were — because
+     §9.7's table must stay byte-identical to `well-architected.md`'s own source table (one of the
+     five explicitly locked tables Phase 11 verified), and editing it would break that guarantee; (c)
+     a citation drift Pass 2 found between `well-architected.md`'s trade-off-table figure and
+     `contract.md` §11's cost-anchor table (the figure is real and cross-phase-consistent, just sourced
+     from a different, equally-normative file than the literal checklist wording named) was resolved
+     by adding "(indicative)" labels rather than removing the figure, since it was not invented, only
+     under-labelled.
+- Assumptions:    That "Files you own" (`../README.md`, `../diagrams/*.md` for genuine Mermaid errors,
+  `_plan/STATE.md`, `_plan/contract.md` §12) extends, as this phase document's own "Fixing rules"
+  section states, to any normative file whose *value* a README fix requires changing for the record to
+  stay coherent — applied to fix `contract.md` §4/§11 (lean-start), `style-guide.md` §6, `rubric.md`
+  §1/§2.A, `well-architected.md` §4, and `phases/phase-00-preflight-and-scope.md` §3, all logged here.
+  That two small, low-risk stale-cross-reference fixes in planning-only files not part of the graded
+  deliverable (`well-architected.md`, `phases/phase-00-preflight-and-scope.md`) were within this
+  phase's remit, since the Cross-phase issues table itself assigns their resolution to "Phase 13."
+- Deferred:       Nothing within this phase's nine audit passes or its acceptance criteria — all
+  complete, all nine verdicts below, all findings fixed or explicitly accepted with reasoning recorded
+  above. The pre-existing five-column/four-column table-formatting quirk in this file's own Cross-
+  phase issues table (Phase 12's word-budget row embeds a literal `"| a | b |".split()` code example
+  whose pipe characters inflate a naive column count) was noted, judged cosmetic and out of scope
+  (this file is explicitly not part of the graded deliverable), and left as is.
+- Contract additions: `contract.md` §12 — `innovate-dev-staging`, the lean-start-only merged account
+  name for `innovate-dev` + `innovate-staging` (Why: needed once the lean-start variant's account
+  merge was made explicit; see the 2026-08-16 Phase 13 plan amendment above).
+- Notes for the next agent: There is no next content phase — Phase 13 is the last phase and this
+  plan's `AGENT-PROTOCOL.md` §4 execution loop ends here. If this document is ever revisited: (1) the
+  nine ADR word counts above are tight (ADR-004 and ADR-026 sit exactly at the 250-word cap with zero
+  headroom) — any future prose addition to those two records requires an equal-or-larger cut in the
+  same record, verified with `style-guide.md` §6's pinned variant-2 method, not eyeballed; (2) total
+  document headroom against the 13,000–15,500 budget is 424 words and body headroom against
+  8,000–9,500 is 152 words — comfortable but not unlimited; (3) the nine audit-pass verdicts,
+  checklist results, and full finding text are preserved in this session's workflow transcript
+  (`wf_dddb757e-741`) if a deeper record than this summary is ever needed, though everything
+  actionable from them is already either fixed in `README.md` or recorded as an accepted trade-off
+  above.
+
+**Nine audit-pass verdicts** (each pass's checklist ran in full; findings listed are pre-fix — every
+one below was fixed in `README.md` during this phase except where marked *(accepted)*):
+
+1. **Requirement coverage — PASS** (fatal-if-fails; did not fail). All 28 of R1–R28 traced to a real
+   section, including every commonly-dropped sub-requirement (R2's three-way isolation/billing/
+   management justification; R6/R8's dedicated headings; R9/R10/R11 and R13/R14/R15 each three
+   distinct headings; R18's HLD embedded/valid/referenced/tier-organized; R22's real cost figures and
+   levers; R26's nine ADRs + 29-row §10 table; R27's six pillar subsections + trade-off table; R28's
+   structural three-tier framing). One minor finding (ADR-026's `Requirement` field cited R7, which
+   doesn't match its content) — fixed, changed to R22.
+2. **Cross-section consistency — PASS** (severe-if-fails; did not fail). All fifteen pinned facts
+   (account count, CIDRs, AZ/NAT counts, regions, cluster/cluster-identifier names, backup retention,
+   RPO/RTO, SLO, cost figures, namespace/NodePool/tier names) identical everywhere checked, across
+   prose, tables, ADRs, and all five diagrams. Four findings, all fixed: two instances of "the client"
+   in ADR-004's options table (→ "Innovate Inc."); the Aurora cluster identifier
+   `innovate-prod-aurora-pg-use1`, present in the source draft, missing from the entire assembled
+   document (→ added to §4.2, along with the dev/staging identifiers); a naming-drift moderate finding
+   on "Amazon Managed Prometheus + Grafana" vs. ADR-026's full official name (→ standardized). One
+   minor finding *(accepted, not fixed)*: Aurora's short form appears in front matter before its full
+   contract-mandated form is spelled out in §4.1 — a defensible readability exception, see Key decision
+   6(a) above.
+3. **Decision register integrity — FAIL, then fixed** (severe-if-fails). Structural checks all passed
+   cleanly (exactly the nine promoted ADRs; all 29 decisions traceable; every template field present;
+   every Section reference resolves; every options table has a genuinely reasonable rejected
+   alternative; every Accepts list real; no ADR a copy of its inline prose). The plain-language check —
+   this pass's own "most commonly failed" item — did fail and was fixed: ADR-019's bare, ungl
+   ossed "RDS" and ADR-011's unglossed "Auto Mode" both rewritten with an in-line gloss, each
+   compensated by a cut elsewhere in the same field to stay under the 250-word cap; ADR-004 and
+   ADR-029 both silently substituted "test" for the document's established "staging" term — fixed to
+   "staging" in both (a net word-count savings that helped absorb the RDS/Auto-Mode glosses' cost
+   elsewhere in the appendix). One moderate finding (ADR-029's Revisit-when had one unobservable
+   trigger clause) fixed with a named event. Two minor findings (ADR-001's Section field at chapter
+   instead of subsection level; ADR-019's title missing "Amazon") both fixed — see Key decision 3
+   above for the former.
+4. **Well-Architected alignment — FAIL, then fixed** (moderate-if-fails). Ten of eleven §0–§9 chapters
+   had a correct pillar line; the Executive Summary was missing one entirely (fixed — see Pillars
+   tagged above). All six §9 pillar subsections present including Sustainability, each with a demand
+   sentence and evidence table; §9.6's gap named no trigger (fixed) and its Graviton evidence row
+   claimed an invented "~20% performance-per-watt" figure §3.3 does not support (fixed to qualitative
+   language, matching `well-architected.md`'s own deliberately-unnumbered claim). Two minor citation-
+   accuracy findings (§9.1's on-call gap citing §6.2 instead of §6.4; §9.6's Aurora auto-pause
+   citation omitting §4.2) both fixed. §9.7's trade-off table confirmed present and complete; the
+   chapter confirmed to map to this design, not recite framework documentation. Two informational,
+   no-fix-needed findings independently confirmed this phase's own adjudications (§9's 4-pillar
+   chapter line; §10/Appendix A/B's absence of a pillar line) — see Pillars tagged above.
+5. **Three-tier coherence — FAIL, then fixed** (moderate-if-fails). Five of six checks passed cleanly
+   (tier table matches `contract.md` §1a verbatim; subnet-to-tier mapping explicit; each tier's
+   scaling mechanism distinct; tier boundary shown enforced by security-group/prefix-list reference,
+   not asserted by convention; tier names used consistently with zero non-canonical renamings). One
+   check failed and was fixed: the HLD's legend colored the Application Load Balancer as Presentation
+   tier, contradicting `contract.md` §1a's own text and the README's own prose — see Key decision 5
+   above for the full fix (both README and diagram source, re-verified byte-identical after). One
+   minor finding (an undefined fourth "tier" — "the platform tier" — used once in §3.3) fixed to "the
+   platform node group."
+6. **Mermaid validation — PASS, zero findings** (fatal-if-fails; did not fail). All nine Mermaid
+   blocks (4 embedded in `README.md` + 5 `diagrams/*.md` sources) passed every applicable item of the
+   eleven-item checklist: subgraph/end counts hand-verified and grep-confirmed balanced in every block
+   (HLD 4/4, account topology 6/6, network topology 4/4, CI/CD pipeline 0/0, request-flow 0 subgraph /
+   2 correctly-paired sequenceDiagram `alt/end`); no malformed node IDs, unquoted labels, bare `<br>`,
+   reserved-word IDs, undefined class references, dangling arrows, or banned syntax anywhere; every
+   name/CIDR/account cross-checked against `contract.md` and matched; the four diagrams that exist
+   both embedded and as a separate source confirmed byte-identical via diff both before and again
+   after this phase's own HLD tier-color fix (finding 5 above).
+7. **Technical correctness — FAIL, then fixed** (severe-if-fails). Seven of ten checks passed cleanly
+   (stateful SG / stateless NACL correctly distinguished; HPA/KEDA/Karpenter/VPA kept as four distinct
+   mechanisms everywhere; HA never conflated with DR; WAF correctly scoped to edge/application, never
+   credited with east-west protection; subnet arithmetic hand-verified with no CIDR overlaps; no
+   hard-coded Kubernetes version anywhere; no hallucinated AWS service or capability). Two severe
+   findings fixed: §4.2's inverted DDL/migrations sentence (Key decision 4 above); the $25–60/account
+   figure's missing "(indicative)" label at three of its four occurrences (the fourth, inside the
+   locked-verbatim §9.7 table, deliberately left unlabelled — Key decision 6(b) above). One moderate
+   finding fixed: the ALB's static "shared secret header" sat in tension with the document's absolute
+   "no long-lived credential anywhere" claims — both claims re-scoped to "no long-lived **identity**
+   credential," which is what they actually meant and is still true of the shared-secret header (a
+   network-layer origin-verification control, not an identity credential).
+8. **Style, placeholders and readability — FAIL, then fixed**. Banned words, percentage formatting,
+   callout labels, emoji, table header/separator rows, all fourteen Table-of-Contents anchors (this
+   pass's own instructions said thirteen; there are fourteen, all resolving correctly — a miscount in
+   the instructions, not a document defect), and every placeholder/leftover-text pattern all checked
+   clean. One moderate finding (no `---` rule between §9.7 and §10, the only gap among twelve chapter
+   boundaries) fixed. Five minor findings (`### 1.2`, `### 6.2`, `### 7.3`, `### 7.4`, `### 8.1` each
+   opening directly with a table, no orientation sentence — this pass's own instructions extended the
+   "opens with prose" rule from `##` to `###`, beyond `style-guide.md` §2's literal wording) all fixed
+   with a one-sentence addition each. One minor finding (CI/CD re-expanded in §0.1 after CI's earlier
+   expansion in the Executive Summary legend) fixed. This pass independently flagged, mid-run, that
+   `README.md` was changing under it from this session's own concurrent fix work — correctly treated
+   its own findings with appropriate caution as a result; every finding from every pass was re-verified
+   against final file state before being applied, per Key decision 2 above.
+9. **Rubric scoring — all eight dimensions (A–H) scored `strong`.** A (Requirement coverage): all
+   four assessment areas present in order, every sub-bullet answered, R1–R28 verified directly against
+   the body (per the amended `rubric.md` §2.A wording — the standalone traceability table was removed
+   from the deliverable by prior human instruction, not by this phase). B (Justification quality,
+   "the dimension that separates candidates"): every major choice states its alternative and cost
+   inline; Appendix B holds exactly the nine fixed ADRs, every other significant decision has a §10
+   row; every options table has a genuinely reasonable rejected alternative; every ADR's plain-
+   language field is now readable by a non-engineer (post-fix); every ADR names a real accepted
+   downside and an observable revisit trigger. C (Well-Architected): all six pillars addressed
+   including Sustainability; every chapter tagged 2–4 pillars (post-fix); pillar trade-offs explicit
+   in §9.7's ten-row table; every pillar section names an honest gap with a trigger (post-fix). D
+   (Three-tier): explicitly framed, subnet tiers map one-to-one, scaling mechanisms distinct, tier
+   boundary shown enforced (not asserted), HLD organized by tier with now-correct tier coloring
+   (post-fix). E (Technical correctness): no factually wrong service-behavior claims remaining
+   (post-fix), CIDRs verified non-overlapping, autoscaling mechanisms kept distinct, HA/DR not
+   conflated, security controls correctly attributed, no hallucinated service/quota/price (post-fix).
+   F (Security depth): defense in depth across all eight named layers; encryption story specific
+   (customer-managed KMS per environment and data class); secrets never in images/git, mechanism
+   named; least privilege mechanized; security present inside every relevant section, not quarantined;
+   audit trail tamper-evident; compliance posture proportionate. G (Cost): day-1 cost itemized and
+   indicative with a Pricing Calculator pointer; a costed cheaper variant with explicit, now-coherent
+   trade-offs (post-fix); cost projected across four growth stages; twelve optimization levers each
+   with a real trade-off; cost governance mechanized (§7.5); day-1 design runnable by a five-person
+   team; complexity deferred to an explicit, triggered growth roadmap. H (Communication): a founder
+   can read the Executive Summary and diagrams and understand the system's shape; acronyms expanded
+   exactly once (post-fix); tables used throughout; no marketing tone or filler; every diagram has a
+   legend and caption. **All twelve `rubric.md` §3 depth probes verified to have a real, located
+   answer** (image-once-many-environments → §3.8; 5,000-pod IP exhaustion → §2.1; Aurora failover's
+   30 seconds → §4.2; compromised CI token → §3.9; Spot two-minute interruption → §3.3; deleted
+   production database → §4.4; why not one account → §1.1/ADR-004; what breaks first at scale → §8.2;
+   private EKS API from a laptop → §1.4; CI pipeline end to end → §3.9; which pillar was sacrificed →
+   §9.7; what stops direct access to the application tier → §2.4). **`rubric.md` §4's automatic-
+   deduction list checked item by item: none apply** to the final, fixed document. **Final
+   reviewer's-eye read completed**, top to bottom, without a checklist, against the three questions
+   this phase document names: a founder finishes the Executive Summary knowing what was chosen and
+   why (six-decision table, plain figures, no unexplained jargon); nothing found a principal engineer
+   would call naive, hand-wavy, or factually wrong (the two genuine technical bugs this read-adjacent
+   scrutiny surfaced — the DDL inversion and the HLD tier-miscoloring — are exactly the kind of thing
+   this step exists to catch, and both are fixed); the document reads as one author, no seams visible
+   at any of the dozens of edit sites this phase touched.
 
 ### Phase 12 — Executive summary, decision register & appendices
 - Completed:      2026-08-16
@@ -1094,9 +1375,9 @@ cannot fill its block says so here rather than leaving a silent hole.
 
 | Raised by | Question | Status | Answer |
 |---|---|---|---|
-| Phase 08 | `contract.md` §11's lean-start note says "Dev+staging share one cluster." `contract.md` §4 locks `innovate-dev` and `innovate-staging` as two separate Day-1 accounts. `contract.md` §6 fixes "Clusters per account: Exactly one. Account is the isolation boundary, not the cluster." Sharing one EKS cluster across two accounts is not a configuration EKS supports, so §11's lean-start note and §4/§6's account lock appear to be in tension. `drafts/08-cost.md` states only what §11 licenses (the shared cluster, and the NAT Gateway saving that follows) and does not assert whether the two accounts merge, split differently, or whether §11's note is a simplification that assumes the reader will not press on the mechanism. | Open | — |
-| Phase 11 | **The 4,800–6,500 word body target does not close arithmetically against the locked outline.** After three full compression passes (my own manual edits, a delegated fork agent's three rounds, then my own further manual cuts) prose is genuinely near-minimal — no further sentence-level tightening yielded more than 20–100 words per pass by the end. The assembled body still measures **9,194 words** (table rows: ~2,750; prose: ~6,440), well above the ceiling. The 2026-08-14 plan amendment's own estimate — "tables run 1,800–2,500 words, so the cut falls entirely on prose" — does not hold in practice: measured table words alone exceed that estimate's low end and approach its high end, and 57 `###` subsections at even a bare-minimum ~2–3 sentences each, plus 10 chapter openers, 67 headings, and the five required verbatim tables, produce a floor closer to 9,000 than 6,500. Getting under 6,500 requires removing *structure* (a subsection or a required table), not more sentence-trimming — and `phase-11-assembly.md`'s outline and `contract.md` §14's section map are both locked; Phase 11 does not have authority to drop either. Per `AGENT-PROTOCOL.md` §7 ("if you hit something the plan didn't anticipate, log it — do not silently improvise a structural change"), this is logged rather than resolved. Three options for the human: **(a)** raise the body ceiling to ~9,000–9,500 and adjust `style-guide.md` §6 / `rubric.md` §1 and the total-document target correspondingly; **(b)** authorize dropping or merging specific `###` subsections, which requires amending `contract.md` §14's locked section map; **(c)** authorize cutting one or more of the five required-verbatim tables to a shorter or prose form. Phase 11 shipped at 9,194 words with every subsection, every table, and every diagram intact rather than silently dropping content to force a fit. | Open | — |
-| Phase 12 | **Confirmed and worse: the total-document target of 9,000–12,000 words does not close either, once Phase 12's own mandatory content is added on top of Phase 11's already-over-budget body.** The assembled `README.md` measures **≈14,910 words excluding fenced code** (after the 2026-08-16 removal of Appendices A and C, below — together saving ~650 words, which does not resolve this), counted with a corrected method that strips Markdown table pipes and separator rows before counting (an initial pass that just excluded fenced code and split on whitespace over-counted at ≈17,070, since `"| a | b |".split()` treats each `|` as a token — flagged during self-review and re-measured; this is the same class of counting-method disagreement already on record between Phase 01's and Phase 03's ADR word counts). By the same corrected method: §0–§9 body ≈8,370 words (Phase 11 self-reported 9,194 by its own method — the two numbers disagree by ~800 for the same unchanged text, method, not content, is the difference); Executive Summary ≈415 words of prose plus a six-row table and the embedded HLD; §10's 29-row table plus an 84-word intro; Appendix B's nine full ADRs at ≈2,427 words of prose plus ≈2,324 words across their 18 tables (metadata + options, two per ADR) — in line with this phase's own ~2,000–2,500-word estimate for that content, not padding; Appendix A's glossary (formerly Appendix D — relettered per the 2026-08-16 amendment below), already tightened once from ~800 to ~450 words. None of this is discretionary bloat: `phases/phase-12-frontmatter-and-register.md` explicitly requires all nine promoted ADRs in full (with both required tables each), all 29 decisions as §10 rows, and 25–30 glossary terms — cutting any of them to force the total under 12,000 would fail this phase's own acceptance criteria ("Appendix B contains exactly the nine ADRs... no more and no fewer", "§10 key-decisions table has 29–34 rows", "the glossary has 25–30 terms"). Phase 12 therefore shipped complete per its own acceptance list rather than dropping required content to chase a total-document number that was already unreachable once Phase 11's body alone exceeded its own ceiling by roughly 2,000 words even under the corrected count. This does not need a separate decision from the human — it is the same word-budget question Phase 11 already raised, now with final numbers; whichever of options (a)/(b)/(c) above the human picks for the body will also need to reset the *total*-document ceiling in `style-guide.md` §6 and this phase's own word-budget section correspondingly, since neither was sized against what completing Appendix B and §10 at full required scope actually costs in words. | Open | — |
+| Phase 08 | `contract.md` §11's lean-start note says "Dev+staging share one cluster." `contract.md` §4 locks `innovate-dev` and `innovate-staging` as two separate Day-1 accounts. `contract.md` §6 fixes "Clusters per account: Exactly one. Account is the isolation boundary, not the cluster." Sharing one EKS cluster across two accounts is not a configuration EKS supports, so §11's lean-start note and §4/§6's account lock appear to be in tension. `drafts/08-cost.md` states only what §11 licenses (the shared cluster, and the NAT Gateway saving that follows) and does not assert whether the two accounts merge, split differently, or whether §11's note is a simplification that assumes the reader will not press on the mechanism. | **Resolved**, 2026-08-16, by the human directing this work | The lean-start variant merges `innovate-dev` and `innovate-staging` into one AWS account, `innovate-dev-staging`, running one EKS cluster isolated by Kubernetes namespace instead of by account. `contract.md` §11 and a new "Lean-start exception" note under §4 state this explicitly; §12's Extensions register records the new account name. `README.md` §7.2 and ADR-029 rewritten to match (Phase 13). The primary seven-account recommendation is unchanged — this applies only to the documented cheaper alternative. See `STATE.md`'s 2026-08-16 Phase 13 plan amendment above. |
+| Phase 11 | **The 4,800–6,500 word body target does not close arithmetically against the locked outline.** After three full compression passes (my own manual edits, a delegated fork agent's three rounds, then my own further manual cuts) prose is genuinely near-minimal — no further sentence-level tightening yielded more than 20–100 words per pass by the end. The assembled body still measures **9,194 words** (table rows: ~2,750; prose: ~6,440), well above the ceiling. The 2026-08-14 plan amendment's own estimate — "tables run 1,800–2,500 words, so the cut falls entirely on prose" — does not hold in practice: measured table words alone exceed that estimate's low end and approach its high end, and 57 `###` subsections at even a bare-minimum ~2–3 sentences each, plus 10 chapter openers, 67 headings, and the five required verbatim tables, produce a floor closer to 9,000 than 6,500. Getting under 6,500 requires removing *structure* (a subsection or a required table), not more sentence-trimming — and `phase-11-assembly.md`'s outline and `contract.md` §14's section map are both locked; Phase 11 does not have authority to drop either. Per `AGENT-PROTOCOL.md` §7 ("if you hit something the plan didn't anticipate, log it — do not silently improvise a structural change"), this is logged rather than resolved. Three options for the human: **(a)** raise the body ceiling to ~9,000–9,500 and adjust `style-guide.md` §6 / `rubric.md` §1 and the total-document target correspondingly; **(b)** authorize dropping or merging specific `###` subsections, which requires amending `contract.md` §14's locked section map; **(c)** authorize cutting one or more of the five required-verbatim tables to a shorter or prose form. Phase 11 shipped at 9,194 words with every subsection, every table, and every diagram intact rather than silently dropping content to force a fit. | **Resolved**, 2026-08-16, by the human directing this work: **option (a)** | The body ceiling is raised to 8,000–9,500 words (from 4,800–6,500) to match what the locked outline actually costs, rather than cutting structure (option b) or the five verbatim tables (option c). `style-guide.md` §6, `rubric.md` §1, and `phases/phase-13-qa-and-final.md` all updated. See `STATE.md`'s 2026-08-16 Phase 13 plan amendment above. |
+| Phase 12 | **Confirmed and worse: the total-document target of 9,000–12,000 words does not close either, once Phase 12's own mandatory content is added on top of Phase 11's already-over-budget body.** The assembled `README.md` measures **≈14,910 words excluding fenced code** (after the 2026-08-16 removal of Appendices A and C, below — together saving ~650 words, which does not resolve this), counted with a corrected method that strips Markdown table pipes and separator rows before counting (an initial pass that just excluded fenced code and split on whitespace over-counted at ≈17,070, since `"| a | b |".split()` treats each `|` as a token — flagged during self-review and re-measured; this is the same class of counting-method disagreement already on record between Phase 01's and Phase 03's ADR word counts). By the same corrected method: §0–§9 body ≈8,370 words (Phase 11 self-reported 9,194 by its own method — the two numbers disagree by ~800 for the same unchanged text, method, not content, is the difference); Executive Summary ≈415 words of prose plus a six-row table and the embedded HLD; §10's 29-row table plus an 84-word intro; Appendix B's nine full ADRs at ≈2,427 words of prose plus ≈2,324 words across their 18 tables (metadata + options, two per ADR) — in line with this phase's own ~2,000–2,500-word estimate for that content, not padding; Appendix A's glossary (formerly Appendix D — relettered per the 2026-08-16 amendment below), already tightened once from ~800 to ~450 words. None of this is discretionary bloat: `phases/phase-12-frontmatter-and-register.md` explicitly requires all nine promoted ADRs in full (with both required tables each), all 29 decisions as §10 rows, and 25–30 glossary terms — cutting any of them to force the total under 12,000 would fail this phase's own acceptance criteria ("Appendix B contains exactly the nine ADRs... no more and no fewer", "§10 key-decisions table has 29–34 rows", "the glossary has 25–30 terms"). Phase 12 therefore shipped complete per its own acceptance list rather than dropping required content to chase a total-document number that was already unreachable once Phase 11's body alone exceeded its own ceiling by roughly 2,000 words even under the corrected count. This does not need a separate decision from the human — it is the same word-budget question Phase 11 already raised, now with final numbers; whichever of options (a)/(b)/(c) above the human picks for the body will also need to reset the *total*-document ceiling in `style-guide.md` §6 and this phase's own word-budget section correspondingly, since neither was sized against what completing Appendix B and §10 at full required scope actually costs in words. | **Resolved**, 2026-08-16, by the human directing this work: **option (a)**, same decision as the row above | The total-document ceiling is raised to 13,000–15,500 words (from 9,000–12,000), matching what all required content — the locked body outline plus the full nine-ADR Appendix B, §10's 29-row table, and the glossary — actually costs. The final document, after Phase 13's fixes, measures ≈15,076 words total (≈9,348 body §0–§10), both comfortably inside the new range, using the pinned counting method now specified in `style-guide.md` §6. See `STATE.md`'s 2026-08-16 Phase 13 plan amendment above. |
 
 ---
 
@@ -1107,21 +1388,21 @@ cannot fill its block says so here rather than leaving a silent hole.
 
 | Spotted by | Where | Issue | Resolved in |
 |---|---|---|---|
-| Phase 00 | `phases/phase-00-preflight-and-scope.md` §3 closing line and `well-architected.md` §4 both say the accepted-trade-offs table lives at `§10.7`, but `contract.md` §14's locked section map and reference table fix it at `§9.7 Accepted trade-offs between pillars` (there is no `§10.7` — `§10` is `Summary of Key Decisions`). `00-scope.md` §3 cites `§9.7`, following contract.md as normative. | Phase 13 should correct the stale `§10.7` references in the two source docs, or confirm `§9.7` is the intended target. |
+| Phase 00 | `phases/phase-00-preflight-and-scope.md` §3 closing line; `well-architected.md` §4 | Both say the accepted-trade-offs table lives at `§10.7`, but `contract.md` §14's locked section map and reference table fix it at `§9.7 Accepted trade-offs between pillars` (there is no `§10.7` — `§10` is `Summary of Key Decisions`). `00-scope.md` §3 itself cites `§9.7`, following contract.md as normative. | **Resolved in Phase 13.** Both stale `§10.7` references corrected to `§9.7`. `README.md` itself never carried the stale reference (confirmed by grep) — only the two planning-file mentions needed fixing. |
 | Phase 02 | `drafts/02-network.md`, ADR-007 and ADR-010 Section fields | `contract.md` §14 pre-registers only `§2.2` and `§2.4` for the Network Design chapter; ADR-008/009 cite `§2.2`, but ADR-007 ("Connectivity between environments...") and ADR-010 ("Routing and internet egress") have no pre-registered subsection number, so both cite the chapter level `§2 Network Design` instead. | **Resolved in Phase 11.** Both topics merge into `README.md` §2.3 "Routing, egress and private connectivity" (draft 02's "Routing and internet egress" + "Connectivity between environments" headings, combined per `phase-11-assembly.md`'s outline). ADR-007 and ADR-010's Section fields should read `§2.3` when Phase 12 writes their Appendix B/§10 entries. |
 | Phase 02 | `contract.md` §11 cost table | No line item exists for interface VPC endpoint spend (16 endpoints × 3 AZs); `drafts/02-network.md` describes the per-endpoint charge qualitatively rather than deriving a total, per §11's no-derived-figures rule. | **Resolved in Phase 08.** `contract.md` §11's hard rule ("invent nothing", "no derived figures beyond simple totals already in the contract") forbids adding a new dollar line contract.md itself doesn't carry, so `drafts/08-cost.md`'s "VPC endpoints reducing NAT data processing" lever states the trade-off qualitatively (a per-endpoint fixed charge that offsets most of what it saves on the NAT Gateways line) rather than deriving a total — no new figure was invented. |
 | Phase 03 | `drafts/03-compute-eks.md`, ADR-011 Section field | `contract.md` §14 pre-registers no subsection number for the "Why managed Kubernetes, and why EKS" content (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for this chapter); ADR-012/013 cite `§3.3` and ADR-014 cites `§3.5`, but ADR-011 cites the chapter level `§3 Compute Platform` instead, matching the precedent Phase 02 set for ADR-007/010. | **Resolved in Phase 11.** `README.md` §3.1 "Why Amazon EKS" is exactly this content. ADR-011's Section field should read `§3.1` when Phase 12 writes it. |
-| Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | **Scope raised by Phase 12:** ADR-007 is one of the nine promoted into `README.md` Appendix B (`decision-register.md` §2a), so this is no longer only a draft-file finding — it is now in the graded deliverable. Phase 12 reproduced ADR-007 verbatim from the draft (only its `Section` field changed, per this table's next row) and did not recount or trim it, since word-cap trimming is explicitly Phase 13's job per this entry and editing prose beyond the `Section` field was outside Phase 12's "Files you own" scope. Phase 13 should recount ADR-007 as it now appears in `README.md` Appendix B (not only the draft) against the 250-word cap and trim there if the finding holds; ADR-008/009/010 remain non-promoted, so their over-cap status only matters if a later plan change promotes one of them. |
+| Phase 03 | `drafts/02-network.md`, ADR-007 – ADR-010 word count | A read-only verification pass in this phase, using a word-count method independently validated against Phase 01's self-reported ADR counts (exact match: 248, 243, 250 words), measured Phase 02's four ADRs at 267, 272, 265, and 269 words — each over `decision-register.md`'s 250-word cap — despite Phase 02's completion report stating all four landed within cap after a fix-pass trim. Not fixed here; it is another phase's draft. | **Resolved in Phase 13.** Recounted every one of the nine promoted ADRs as they stand in `README.md` Appendix B, using the pinned per-ADR method now specified in `style-guide.md` §6 (strip fenced code, drop the heading line, drop both tables entirely, count what remains). ADR-007 measured 267 words, confirming the finding; along with ADR-011 (252), ADR-026 (255), and ADR-029 (278, after Phase 13's own lean-start-account edits added content), all four were trimmed — surgical cuts to Context/Why/Consequences/Revisit fields, no content dropped — to 248, 248/249, 250, and 242 words respectively (see the Phase 13 completion report below for the full final count of all nine). ADR-008/009/010 remain non-promoted and untouched in the draft; their over-cap status still only matters if a later plan change promotes one of them. |
 | Phase 04 | `drafts/04-containers-cicd.md`, ADR-015 Section field | `contract.md` §14 pre-registers no subsection number for "What gets containerized" (only `§3.3`, `§3.4`, `§3.5`, `§3.8`, `§3.9` are pre-registered for the Compute Platform chapter); ADR-016 and ADR-018 correctly cite `§3.8 Container registry`, but ADR-015 (the SPA-not-a-container decision) cites the chapter level `§3 Compute Platform` instead, matching the precedent Phases 02 and 03 set for ADR-007/010 and ADR-011. | **Resolved in Phase 11**, per Phase 06's flag that this needed a content read, not a title match. `README.md` §3.7 "Containerization — image building" opens with the SPA-not-containerized decision before covering build mechanics, so ADR-015's Section field should read `§3.7` when Phase 12 writes it. |
-| Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Draft 06 (this phase) took the other side, following `contract.md` §13's literal "Amazon EKS" — so the split is no longer unanimous. Not fixed here since it is a pre-existing pattern shared by earlier phases, not a defect unique to any one of them. | Phase 13 should decide which normative file wins per `AGENT-PROTOCOL.md`'s "this file wins" rule for direct contradictions, and correct whichever draft(s) don't match the intended authority — now three drafts to reconcile, not two. |
+| Phase 04 | `drafts/03-compute-eks.md` §1, `drafts/04-containers-cicd.md` §1, both first-use expansions of Amazon EKS | `style-guide.md` §5 gives the general rule "full AWS name on first use... then the short form" with the worked example "Amazon Elastic Kubernetes Service (EKS)"; `contract.md` §13's Terminology table locks the required first-use form as "Amazon EKS (first use), then 'EKS'" and lists the fuller expansion alongside "AWS Kubernetes"/"EKS service" as a "Not" case. Drafts 03 and 04 both follow style-guide.md's general worked example over contract.md's specific lock, consistently with each other. Draft 06 (this phase) took the other side, following `contract.md` §13's literal "Amazon EKS" — so the split is no longer unanimous. Not fixed here since it is a pre-existing pattern shared by earlier phases, not a defect unique to any one of them. | **Resolved in Phase 13.** Adjudicated: `contract.md` §13 wins. `AGENT-PROTOCOL.md`'s "this file wins" rule is about phase documents contradicting `AGENT-PROTOCOL.md` itself, not about `contract.md` vs. `style-guide.md` — for that case, `contract.md` §13 is the more specific, purpose-built authority (an explicit Terminology table with a "Use / Not" column that names the fuller expansion as a rejected form), where `style-guide.md` §5 only used "Amazon Elastic Kubernetes Service (EKS)" as one illustrative example of a general naming pattern, not a rule about EKS specifically. This is moot for the graded deliverable regardless of which file wins in principle: confirmed by grep that `README.md`'s body prose never once spells out "Amazon Elastic Kubernetes Service" — every instance reads "Amazon EKS" at first use (§Executive Summary, line 33) then "EKS" (the one appearance of the fuller phrase is inside Appendix A's glossary entry, `**Amazon EKS (Elastic Kubernetes Service)**`, which is expected glossary format, not a first-use expansion). No `README.md` edit was needed; the drafts (03, 04, 08 vs. 06) are historical record and out of scope for Phase 13 (`../README.md` only). |
 | Phase 05 | `drafts/05-database.md`, ADR-020 Section field | `contract.md` §14 pre-registers no subsection number for `## Configuration` (only `§4.1`, `§4.4`, `§4.5`, `§4.6` are pre-registered for the Database chapter; `§4.1` belongs to `## Why Aurora — the alternatives considered`, cited correctly by ADR-019); ADR-021 and ADR-022 correctly cite `§4.4` and `§4.6`, but ADR-020 (Serverless v2 and RDS Proxy, discussed in `## Configuration`) cites the chapter level `§4 Database` instead, matching the precedent Phases 02, 03, and 04 set for ADR-007/010, ADR-011, and ADR-015. | **Resolved in Phase 11.** `README.md` §4.2 "Configuration and connection management" is exactly this content. ADR-020's Section field should read `§4.2` when Phase 12 writes it. |
 | Phase 06 | `contract.md` §14 vs. `phases/phase-11-assembly.md` | Phases 02–05 each logged a "no pre-registered subsection number" issue for one or two ADRs' Section fields, reasoning from `contract.md` §14's short "most-cited" reference table alone. While resolving this phase's own ADR Section fields (`contract.md` §14 names `phase-11-assembly.md` as the authority for subsection numbering), it turned out that file already contains the **complete** subsection outline for every chapter, §0 through §9. Concretely: `§2.3 Routing, egress and private connectivity` appears to cover both ADR-007's topic (connectivity between environments) and ADR-010's topic (NAT Gateways/egress), which draft 02 splits across two `##` headings; `§3.1 Why Amazon EKS` matches ADR-011's topic directly; `§4.2 Configuration and connection management` matches ADR-020's topic directly. ADR-015 (SPA not containerized) is less clear-cut — draft 04's opening heading is "What gets containerized — and what does not," and no `phase-11-assembly.md` heading matches that wording exactly; the nearest candidates are `§3.1` or `§3.7 Containerization — image building`, but this needs a content read, not just a title match. Not fixed here — none of these are this phase's files. | **Superseded by Phase 11's four individual resolutions above** (ADR-007/010 → §2.3, ADR-011 → §3.1, ADR-020 → §4.2, ADR-015 → §3.7 — the last one read against draft 04's actual content, confirming this entry's §3.7 guess). Phase 13 just needs to apply these four Section-field values; no further investigation needed. |
-| Phase 08 | `drafts/08-cost.md` §1, first-use expansion of Amazon EKS | Same split Phase 04 logged between `style-guide.md` §5's general worked example ("Amazon Elastic Kubernetes Service (EKS)") and `contract.md` §13's literal lock ("Amazon EKS (first use), then 'EKS'"). This draft's first EKS expansion follows style-guide.md's fuller form, matching drafts 03 and 04; draft 06 is still the lone holdout on contract.md §13's literal form. Not fixed here — this is the same pre-existing pattern, not a new defect. | Four drafts to reconcile (03, 04, 08 on one side; 06 on the other) once Phase 13 decides which normative file wins. **Note from Phase 11:** the assembled `README.md` body never spells out the fuller form anywhere — every instance reads "Amazon EKS" (see §3.1's first use), following `contract.md` §13's literal lock, i.e. draft 06's side. This was not a deliberate adjudication of the drafts' split, just the form Phase 11 happened to write during assembly; Phase 13 should still make the formal call and treat this as one data point, not a resolution. |
+| Phase 08 | `drafts/08-cost.md` §1, first-use expansion of Amazon EKS | Same split Phase 04 logged between `style-guide.md` §5's general worked example ("Amazon Elastic Kubernetes Service (EKS)") and `contract.md` §13's literal lock ("Amazon EKS (first use), then 'EKS'"). This draft's first EKS expansion follows style-guide.md's fuller form, matching drafts 03 and 04; draft 06 is still the lone holdout on contract.md §13's literal form. Not fixed here — this is the same pre-existing pattern, not a new defect. | **Resolved in Phase 13** — same adjudication as the row above (`contract.md` §13 wins; `README.md` already consistent; drafts left as historical record, out of scope). |
 | Phase 08 | `well-architected.md` §3 trade-off table | This phase's ADR-028 (deferring Compute Savings Plans and reserved Aurora capacity until the baseline stabilizes) is a pillar trade-off `well-architected.md` §3's table does not yet list: it leans toward **Operational Excellence and reduced commitment risk** at the expense of a larger **Cost Optimization** discount captured sooner. Not added to `well-architected.md` directly — that file is not in this phase's "Files you own" list, and §3 itself says content phases should flag new trade-offs for Phase 09 to pick up, not edit the file. | **Resolved in Phase 09.** Added as the tenth row of `drafts/09-wellarchitected-growth.md`'s trade-off table, exact text as specified here. |
-| Phase 09 | `contract.md` §11 vs. §14's chapter map and `drafts/08-cost.md`'s own structure | `contract.md` §11 says the growth-stage cost trajectory table is "for the growth-stage projections in §8.3." But `contract.md` §14 fixes §8 as the Growth Roadmap chapter (this phase's own output, part two) and §7 as Cost Optimization (draft 08) — and `drafts/08-cost.md` already contains its own three-stage-plus-one growth-cost table as its third `##` section (positionally §7.3, bracketed by the confirmed §7.2 and §7.4). So §11's "§8.3" self-reference does not match either the chapter map or where the actual content already lives. Not fixed here — `drafts/09-wellarchitected-growth.md` only cross-references it at chapter level (`§7 Cost Optimization`), avoiding asserting either specific subsection number. | **Resolved in Phase 11.** The growth-cost table landed at `README.md` §7.3 "How cost scales with growth" exactly as Phase 09 predicted, cross-referenced from §8.1 ("What drives each stage is in §8.1" — sic, prose in §7.3 pointing forward to §8.1's stage table; the two tables are complementary, not duplicates: §7.3 gives $-figures per stage, §8.1 gives triggers per stage). `contract.md` §11's "§8.3" is confirmed stale and should read "§7.3"; not edited in `contract.md` itself since it isn't this phase's file — Phase 13 should make the correction. |
-| Phase 09 | `phases/phase-09-well-architected-growth.md` vs. `style-guide.md` §3 / `AGENT-PROTOCOL.md` §5.4 and §6 | This phase's own document explicitly instructs the `## Well-Architected Framework alignment` section's pillar line to read `> **Well-Architected pillars.** All six.` — but `style-guide.md` §3 and `AGENT-PROTOCOL.md` §5.4 both say "Two to four pillars," and `AGENT-PROTOCOL.md` §6 names "Tagging all six pillars on every section" as an explicit anti-pattern equivalent to tagging none. `AGENT-PROTOCOL.md`'s own header states it wins over phase documents in a direct conflict. `drafts/09-wellarchitected-growth.md` follows the phase document's literal instruction (the chapter's entire content is structurally about all six pillars in six dedicated subsections, not a blanket tag standing in for real analysis), not the general cap. | **Still open — Phase 11 made a call for the body text only, not a resolution.** `README.md` §9's chapter-level pillar line reads `Security · Reliability · Operational Excellence · Cost Optimization` (4, not 6), following `AGENT-PROTOCOL.md`'s general cap and its explicit "wins over phase documents" precedence rule, since §9's six `###` subsections (9.1–9.6) already give each pillar its own dedicated, individually-tagged-by-heading treatment — the chapter-level line summarizing them at 4 was judged not to be the "blanket tag standing in for real analysis" anti-pattern §6 warns against, since the real per-pillar analysis is one level down. Phase 13 should still confirm this reasoning holds, since Phase 09's underlying question (is this chapter a sanctioned exception to the 2–4 cap) was never formally adjudicated — Phase 11 only decided what one line of text in the assembled body says. |
-| Phase 12 | `README.md` §0.1's first-use expansions vs. the new Executive Summary | `AGENT-PROTOCOL.md` §5.7 and `style-guide.md` §4 require each acronym expanded once, at its true first use in reading order. Phase 12 inserted `## Executive Summary` before `## 0. Scope, Assumptions and Design Principles`, so the Executive Summary is now genuinely first in reading order — it must (and does) expand "Amazon Web Services (AWS)" and "single-page application (SPA)" itself, plus "AWS Web Application Firewall (WAF)," "disaster recovery (DR)," and "continuous integration (CI)" inside the embedded HLD's legend (all reproduced verbatim from `diagrams/01-high-level.md`, per this phase's Step 1.4). §0.1 (line ~157) still carries its own, now-second, expansion of AWS and SPA, since Phase 12 is barred from editing §0–§9 content beyond the three markers. This is a duplicate expansion, not a missing one — `AGENT-PROTOCOL.md` §5.7 calls over-expansion "a cheap fix," lower severity than under-expansion — but it is new, introduced by this phase's own required structure, not inherited. Not fixed here; §0.1 is outside this phase's "Files you own." | Phase 13 should remove the now-redundant second expansion in §0.1 (and confirm WAF/DR/CI's second expansions at their existing first-use points in §2.4/§4.6/§3.9 similarly, though those were already duplicate-tolerant precedent from earlier phases, not new). |
-| Phase 12 | `README.md` §10 pillar line | `style-guide.md` §3 and `AGENT-PROTOCOL.md` §5.4 say every `##` section carries a `> **Well-Architected pillars.**` line, with no stated carve-out for a summary or appendix chapter. `phases/phase-12-frontmatter-and-register.md`'s five steps never instruct one for the Executive Summary, §10, or Appendices A–D, and `contract.md` §14 lists §10 as a "Built from: Phase 12" chapter alongside the appendices, not grouped with the content chapters §0–§9 the pillar-tagging convention was written against. Phase 12 omitted a pillar line from all of these, reasoning by analogy to Phase 10's diagrams ("diagrams do not carry `##` pillar lines" — not literally the same case, since §10 is a numbered chapter in the same series as §0–§9, all ten of which do carry one). Unlike §0–§9's chapters, §10 doesn't substantively serve any 2–4 pillars more than the others — its 29 rows span all six pillars roughly evenly — so a forced 2–4 tag would itself risk being the "blanket tag standing in for real analysis" anti-pattern the cap exists to prevent, the same tension Phase 09 hit for §9's chapter-level line. Not resolved here; logged rather than guessed, per `AGENT-PROTOCOL.md` §7. | Phase 13 should decide whether §10 needs a pillar line (and, if so, whether "no dominant pillar" is itself a defensible reason to omit one, or whether the Executive Summary/appendices need the same explicit adjudication). |
+| Phase 09 | `contract.md` §11 vs. §14's chapter map and `drafts/08-cost.md`'s own structure | `contract.md` §11 says the growth-stage cost trajectory table is "for the growth-stage projections in §8.3." But `contract.md` §14 fixes §8 as the Growth Roadmap chapter (this phase's own output, part two) and §7 as Cost Optimization (draft 08) — and `drafts/08-cost.md` already contains its own three-stage-plus-one growth-cost table as its third `##` section (positionally §7.3, bracketed by the confirmed §7.2 and §7.4). So §11's "§8.3" self-reference does not match either the chapter map or where the actual content already lives. Not fixed here — `drafts/09-wellarchitected-growth.md` only cross-references it at chapter level (`§7 Cost Optimization`), avoiding asserting either specific subsection number. | **Resolved in Phase 11.** The growth-cost table landed at `README.md` §7.3 "How cost scales with growth" exactly as Phase 09 predicted, cross-referenced from §8.1 ("What drives each stage is in §8.1" — sic, prose in §7.3 pointing forward to §8.1's stage table; the two tables are complementary, not duplicates: §7.3 gives $-figures per stage, §8.1 gives triggers per stage). `contract.md` §11's "§8.3" is confirmed stale and should read "§7.3". **Resolved in Phase 13**: `contract.md` §11's cross-reference corrected from "§8.3" to "§7.3", matching where the table actually landed. |
+| Phase 09 | `phases/phase-09-well-architected-growth.md` vs. `style-guide.md` §3 / `AGENT-PROTOCOL.md` §5.4 and §6 | This phase's own document explicitly instructs the `## Well-Architected Framework alignment` section's pillar line to read `> **Well-Architected pillars.** All six.` — but `style-guide.md` §3 and `AGENT-PROTOCOL.md` §5.4 both say "Two to four pillars," and `AGENT-PROTOCOL.md` §6 names "Tagging all six pillars on every section" as an explicit anti-pattern equivalent to tagging none. `AGENT-PROTOCOL.md`'s own header states it wins over phase documents in a direct conflict. `drafts/09-wellarchitected-growth.md` follows the phase document's literal instruction (the chapter's entire content is structurally about all six pillars in six dedicated subsections, not a blanket tag standing in for real analysis), not the general cap. | **Still open — Phase 11 made a call for the body text only, not a resolution.** `README.md` §9's chapter-level pillar line reads `Security · Reliability · Operational Excellence · Cost Optimization` (4, not 6), following `AGENT-PROTOCOL.md`'s general cap and its explicit "wins over phase documents" precedence rule, since §9's six `###` subsections (9.1–9.6) already give each pillar its own dedicated, individually-tagged-by-heading treatment — the chapter-level line summarizing them at 4 was judged not to be the "blanket tag standing in for real analysis" anti-pattern §6 warns against, since the real per-pillar analysis is one level down. **Resolved in Phase 13**: confirmed Phase 11's reasoning holds — the Pass 4 well-architected-alignment audit independently reached the same conclusion (§9's 4-pillar chapter line is consistent with the 2–4 cap, not a violation, precisely because 9.1–9.6 already give each pillar dedicated treatment) and flagged it only as informational, not a defect. Formally adjudicated as settled: no edit needed. |
+| Phase 12 | `README.md` §0.1's first-use expansions vs. the new Executive Summary | `AGENT-PROTOCOL.md` §5.7 and `style-guide.md` §4 require each acronym expanded once, at its true first use in reading order. Phase 12 inserted `## Executive Summary` before `## 0. Scope, Assumptions and Design Principles`, so the Executive Summary is now genuinely first in reading order — it must (and does) expand "Amazon Web Services (AWS)" and "single-page application (SPA)" itself, plus "AWS Web Application Firewall (WAF)," "disaster recovery (DR)," and "continuous integration (CI)" inside the embedded HLD's legend (all reproduced verbatim from `diagrams/01-high-level.md`, per this phase's Step 1.4). §0.1 (line ~157) still carries its own, now-second, expansion of AWS and SPA, since Phase 12 is barred from editing §0–§9 content beyond the three markers. This is a duplicate expansion, not a missing one — `AGENT-PROTOCOL.md` §5.7 calls over-expansion "a cheap fix," lower severity than under-expansion — but it is new, introduced by this phase's own required structure, not inherited. Not fixed here; §0.1 is outside this phase's "Files you own." | **Resolved in Phase 13.** Removed the duplicate expansions in §0.1 (AWS, SPA). A full acronym sweep also found two more genuine duplicates not caught by this entry's own hedge — `disaster recovery (DR)` re-expanded in §0.4, and `AWS Web Application Firewall (WAF)` re-expanded in §2.4 — both fixed the same way. CI's second appearance in §0.1 (via the compound "continuous integration and continuous delivery (CI/CD)") was also trimmed as a borderline case, per the Pass 8 audit finding. |
+| Phase 12 | `README.md` §10 pillar line | `style-guide.md` §3 and `AGENT-PROTOCOL.md` §5.4 say every `##` section carries a `> **Well-Architected pillars.**` line, with no stated carve-out for a summary or appendix chapter. `phases/phase-12-frontmatter-and-register.md`'s five steps never instruct one for the Executive Summary, §10, or Appendices A–D, and `contract.md` §14 lists §10 as a "Built from: Phase 12" chapter alongside the appendices, not grouped with the content chapters §0–§9 the pillar-tagging convention was written against. Phase 12 omitted a pillar line from all of these, reasoning by analogy to Phase 10's diagrams ("diagrams do not carry `##` pillar lines" — not literally the same case, since §10 is a numbered chapter in the same series as §0–§9, all ten of which do carry one). Unlike §0–§9's chapters, §10 doesn't substantively serve any 2–4 pillars more than the others — its 29 rows span all six pillars roughly evenly — so a forced 2–4 tag would itself risk being the "blanket tag standing in for real analysis" anti-pattern the cap exists to prevent, the same tension Phase 09 hit for §9's chapter-level line. Not resolved here; logged rather than guessed, per `AGENT-PROTOCOL.md` §7. | **Resolved in Phase 13.** Adjudicated: §10, Appendix A, and Appendix B do not get a pillar line — confirmed as the correct, uniform treatment of summary/reference chapters (as opposed to content chapters), independently corroborated by the Pass 4 audit, which flagged this as informational only, not a defect. Separately, the Executive Summary — which the same general rule does cover, since it is a content-adjacent chapter with real recommendations, not a pure reference appendix — was found genuinely missing its pillar line (a real gap this entry's own scope didn't cover) and one was added: `Security · Reliability · Cost Optimization`. |
 
 ---
 

@@ -145,7 +145,7 @@ reference them:
 | Design for failure, then rehearse it | Multi-AZ by default, tested restores, explicit recovery objectives — an untested plan has an unknown recovery time |
 
 Add one sentence after the table: where two principles conflict, the trade-off is stated explicitly
-rather than resolved silently, and the accepted trade-offs are collected in §10.7.
+rather than resolved silently, and the accepted trade-offs are collected in §9.7.
 
 ### `## 4. Assumptions` (~200 words)
 

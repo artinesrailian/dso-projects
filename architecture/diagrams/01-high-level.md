@@ -58,8 +58,8 @@ flowchart LR
   classDef ops fill:#EDE7F6,stroke:#4527A0,stroke-width:1px,color:#111
   classDef external fill:#ECEFF1,stroke:#455A64,stroke-width:1px,color:#111
   class user,dns external
-  class cf,spa,alb edge
-  class api,worker,argocd compute
+  class cf,spa edge
+  class alb,api,worker,argocd compute
   class proxy,db,dr data
   class ci,ecr,gitops ops
 ```
@@ -68,8 +68,8 @@ flowchart LR
 
 | Element | Meaning |
 |---|---|
-| Orange (`edge`) | Presentation tier — CloudFront, AWS Web Application Firewall (WAF), the S3 origin, the load balancer |
-| Blue (`compute`) | Application tier — Argo CD and the Flask API / worker pods on EKS |
+| Orange (`edge`) | Presentation tier — CloudFront, AWS Web Application Firewall (WAF), the S3 origin |
+| Blue (`compute`) | Application tier — the load balancer, Argo CD, and the Flask API / worker pods on EKS |
 | Green (`data`) | Data tier — RDS Proxy, Aurora PostgreSQL, and the disaster recovery (DR) region |
 | Purple (`ops`) | Delivery pipeline — continuous integration (CI), ECR, and the GitOps repository |
 | Grey (`external`) | Outside the system — end users and DNS resolution |
