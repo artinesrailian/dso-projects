@@ -9,9 +9,11 @@ to run a pod on either architecture with one label.
 > (`terraform validate`, `terraform test` against a mocked provider, `helm lint`/`helm template`,
 > `kubeconform`) and all of that passes, but nothing below has run against a live cluster. The
 > `kubectl` output shown in this README is illustrative, not captured from a real run — treat it
-> as "this is the shape of the output," not a promise. **Phase 8 (`scripts/verify.sh`,
-> `scripts/teardown.sh`) has not been implemented yet** — see **Teardown** below for the manual
-> procedure that stands in for it.
+> as "this is the shape of the output," not a promise. `scripts/verify.sh` and
+> `scripts/teardown.sh` exist and are the intended way to prove and dismantle a real deployment,
+> but neither has been run against live infrastructure either.
+> [`docs/AUDIT.md`](docs/AUDIT.md) records every security requirement with an explicit
+> verified/not-verified status — nothing in it claims verification that did not happen.
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
@@ -406,30 +408,32 @@ first deploy:
 
 ## Teardown
 
-Phase 8 (`scripts/verify.sh`, `scripts/teardown.sh`) has not been implemented in this repository
-yet — `make destroy` knows this and refuses to fall back to a bare `terraform destroy` rather than
-doing the dangerous thing silently. Until that script exists, tear down by hand, in this order:
+**Never run a bare `terraform destroy`.** Use the ordered script — `make destroy` calls it, and
+refuses to fall back to anything else:
 
 ```bash
-# 1. Remove workloads so Karpenter consolidates its nodes away. Deleting the
-#    demo namespace directly is fine here specifically because the whole
-#    stack is coming down next — it is not what the developer section means
-#    by "don't create your own namespace" (that's about day-to-day use).
-kubectl delete -f examples/ --ignore-not-found
-kubectl delete namespace demo --ignore-not-found
-
-# 2. Delete NodeClaims explicitly and wait — Karpenter drains and terminates them.
-kubectl delete nodeclaims --all --wait=true --timeout=15m
-
-# 3. Confirm nothing is left before touching Terraform. Must print nothing.
-#    <cluster-name>: terraform output -raw cluster_name
-aws ec2 describe-instances \
-  --filters "Name=tag:karpenter.sh/managed-by,Values=<cluster-name>" "Name=instance-state-name,Values=running" \
-  --query 'Reservations[].Instances[].InstanceId' --output text
-
-# 4. Now destroy.
-terraform destroy
+make destroy            # or: ./scripts/teardown.sh
 ```
+
+It asks you to type the cluster name, then works in this order:
+
+```text
+0. Preflight  — resolve the cluster from Terraform state and REFUSE to run if
+                your current kubectl context points at a different cluster.
+1. Workloads  — delete examples/, the demo namespace, and every Service
+                type=LoadBalancer and Ingress; poll until their AWS load
+                balancers are actually gone (their ENIs block subnet deletion).
+2. NodeClaims — delete them all and wait, while the Karpenter controller is
+                STILL RUNNING, so it drains and terminates each node properly.
+3. Prove it   — query EC2 on two Karpenter tags. If any instance survives, the
+                script EXITS NON-ZERO here and destroys nothing.
+4. Destroy    — only now, terraform destroy.
+5. Sweep      — EBS volumes and launch templates Karpenter created outside
+                Terraform state, then a residual check.
+```
+
+Step 3 is the point of the whole script: it will not hand over to Terraform on an unproven
+precondition.
 
 **Why the order matters:** a bare `terraform destroy` removes `helm_release.karpenter` first,
 deleting the only controller that reconciles the `karpenter.sh/termination` finalizer on live
