@@ -212,7 +212,7 @@ constrained ones carry a `validation` block.
 | **NodePools** ||||
 | `nodepool_cpu_limit` | `number` | `100` | Total vCPU ceiling across all Karpenter NodePools. **Karpenter's `spec.limits` is per-NodePool**, so Phase 5 divides this by the number of enabled pools — with both on, each pool gets 50. The blast-radius cap. |
 | `nodepool_memory_limit_gi` | `number` | `400` | Same, for memory. A cpu-only limit lets a memory-heavy workload provision far more instance than intended. |
-| `nodepool_capacity_types` | `list(string)` | `["spot","on-demand"]` | Valid values are `spot`, `on-demand`, `reserved`. |
+| `nodepool_capacity_types` | `list(string)` | `["spot","on-demand"]` | Valid values are `spot`, `on-demand`. Karpenter 1.14.0 also recognizes a third value, `reserved` (ODCR/Capacity Blocks; `featureGates.reservedCapacity` is beta and on by default) — see `reference/karpenter-api-reference.md`. Phase 5 §5.3a deliberately does not use capacity reservations, so this variable does not accept it; Phase 0's `validation` block enforces exactly this two-value set. |
 | `nodepool_default_arch` | `string` | `"arm64"` | Which pool wins for a pod with no arch constraint, implemented via NodePool `weight`. `arm64` makes Graviton the default. |
 | `node_ami_alias` | `string` | `"al2023@latest"` | `EC2NodeClass` AMI alias. Pin to a release tag (e.g. `al2023@v20260701`) for production — see `reference/karpenter-api-reference.md` §2. |
 | `enable_arm64_nodepool` | `bool` | `true` | |

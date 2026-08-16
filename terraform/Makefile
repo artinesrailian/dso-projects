@@ -73,6 +73,8 @@ demo-clean:
 # ---------- teardown ----------
 ## destroy: ORDERED teardown. Never use a bare `terraform destroy` — see gotchas G-09.
 destroy:
+	@test -x scripts/teardown.sh || { echo "scripts/teardown.sh does not exist yet (it ships in Phase 8)."; \
+		echo "Refusing to fall back to a bare 'terraform destroy' — see docs/reference/gotchas.md G-09."; exit 1; }
 	./scripts/teardown.sh
 
 .PHONY: help check fmt validate test lint bootstrap init stage-network stage-cluster \

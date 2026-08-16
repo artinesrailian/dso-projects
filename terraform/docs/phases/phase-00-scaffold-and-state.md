@@ -713,28 +713,23 @@ and stop. Do not start Phase 1.
      "Files to create" list, but a standalone root module needs a provider block
      somewhere to be usable, and `versions.tf` is the file that already declares
      `required_providers` for it.
-  5. **`nodepool_capacity_types` validation — real discrepancy found, deliberately
-     left unresolved in code, flagged here instead.** Interface-contract §3 states
-     valid values are `spot`, `on-demand`, `reserved`. Phase-00 §0.6's own
-     validation-blocks table says to validate "every element in
-     `["spot","on-demand"]`" with the rationale "Karpenter rejects anything else."
-     But `docs/phases/phase-05-nodepools.md` §5.3a and
-     `docs/reference/karpenter-api-reference.md` (§ node labels/requirements) both
-     confirm Karpenter 1.14.0 genuinely accepts a third capacity-type value,
-     `reserved` (ODCR/Capacity Blocks; `featureGates.reservedCapacity` is beta and
-     **on by default**) — this build's NodePools just don't use it. I implemented
-     the `variables.tf` validation exactly as phase-00 §0.6 instructs (spot/on-demand
-     only), per this task's explicit instruction to take validation blocks from the
-     phase doc. I did **not** edit interface-contract.md's row to match (I tried
-     that first, then reverted it after finding the phase-05/API-reference
-     evidence, since the contract's existing text looks like the correct one and
-     phase-00's table looks like the stale artifact — but I'm not certain enough to
-     silently rewrite either). **Net effect as shipped:** `var.nodepool_capacity_types`
-     cannot be set to include `"reserved"` even though Karpenter and Phase 5 both
-     acknowledge it as real and supported. The next agent or a human should
-     resolve this explicitly — either loosen the Phase 0 validation to also allow
-     `"reserved"`, or correct phase-00's own table — rather than have it resolve
-     itself by accident in Phase 5.
+  5. **`nodepool_capacity_types` validation — discrepancy found in the original
+     pass, now resolved.** Interface-contract §3 stated valid values were `spot`,
+     `on-demand`, `reserved`, while phase-00 §0.6's own validation-blocks table
+     said to validate "every element in `["spot","on-demand"]`." `variables.tf`
+     was implemented per phase-00 §0.6 (spot/on-demand only), leaving the
+     contract's row unreconciled.
+     **Resolution (2026-08-16 review pass):** `docs/phases/phase-05-nodepools.md`
+     §5.3a is explicit that although Karpenter 1.14.0 does support a third
+     capacity-type value, `reserved` (ODCR/Capacity Blocks;
+     `featureGates.reservedCapacity` is beta and on by default), "this build does
+     not use capacity reservations, so it is simply not listed" — i.e. Phase 5's
+     own design, the actual consumer of this variable, deliberately excludes it.
+     That resolves the ambiguity in favor of the code as shipped: corrected
+     interface-contract.md §3's `nodepool_capacity_types` row to say valid values
+     are `spot`, `on-demand` (with a note on why `reserved` exists in Karpenter but
+     isn't accepted here). No change to `variables.tf` — its validation already
+     matched the correct answer.
   6. **One scope-boundary slip, self-reported.** While spot-checking the working
      tree I ran `git status --porcelain` once at the actual repository root
      (`/home/artin/personal/git/dso-projects`) instead of scoped to `terraform/`,
@@ -743,13 +738,33 @@ and stop. Do not start Phase 1.
      `architecture/` — it was never read, written, or listed as a result — and I
      immediately re-ran the same check properly scoped (`git status --porcelain .`
      from within `terraform/`) and used only that from then on.
+  7. **`Makefile`'s `destroy` target — added the G-09 guard rule §0.10 actually
+     requires, which the section's own literal code snippet omitted.** §0.10's
+     "Two rules for whoever writes this" states: "`destroy` must call
+     `scripts/teardown.sh`, never `terraform destroy`. If Phase 8 has not run
+     yet, make the target fail with a message pointing at G-09 rather than
+     silently doing the dangerous thing." The literal `Makefile` snippet given
+     just above that prose is `./scripts/teardown.sh` with no such guard, and
+     the first implementation pass copied it verbatim — before Phase 8, running
+     `make destroy` failed only with the shell's generic "No such file or
+     directory", not a message pointing at G-09. Added a `test -x
+     scripts/teardown.sh` guard that fails with an explicit G-09 pointer when
+     the script doesn't exist yet. Verified `docs/reference/gotchas.md` G-09 is
+     in fact the ordered-teardown/orphaned-nodes entry the comment cites, and
+     confirmed the new target actually produces the message
+     (`make destroy` → prints the G-09 pointer, exits 1) and that `make check`
+     still passes. `verify:` was deliberately left as a plain call — the phase
+     doc's rule 2 only singles out `destroy` for this treatment, because
+     `destroy` is the target that can orphan billable resources; `verify`
+     failing with "no such file" before Phase 8 is exactly the "fine and
+     self-explanatory" case the phase doc describes elsewhere in §0.10.
 
 - Names added to interface-contract.md (§3, `namespace_quota` row only):
   `requests_cpu` (`string`), `requests_memory` (`string`), `limits_cpu` (`string`),
   `limits_memory` (`string`), `max_deployments` (`number`) — the object's field
   names, fixed to match phase-05's chart template as described above. No other
-  names added; `nodepool_capacity_types`'s row was touched and then reverted back
-  to its original text (see deviation 5).
+  names added. `nodepool_capacity_types`'s row wording was corrected (not a name
+  change) in the 2026-08-16 review pass — see deviation 5.
 
 - Verification run (all from `terraform/`, no AWS credentials used or required):
   - `terraform fmt -check -recursive` → clean.
@@ -784,6 +799,36 @@ and stop. Do not start Phase 1.
     the defaults for `cluster_endpoint_public_access`/`_cidrs` (which fail their
     own cross-validation) don't break plain `terraform validate`.
 
+- **2026-08-16 review pass** (independent re-verification against this phase doc,
+  the interface contract, `version-pinning.md` and `security-checklist.md`; two
+  fixes applied, both re-verified after):
+  - Re-ran every acceptance-criteria command from a clean `terraform/` working
+    directory (`fmt -check -recursive`, root + bootstrap `init -backend=false` +
+    `validate`, `terraform test`, the `.gitignore` grep checks, the
+    variable/description parity count) → all identical results to the original
+    report, all still passing.
+  - Confirmed empirically, in a throwaway scratch config, that Terraform's `$${`
+    sequence really does suppress interpolation (`"user:Project$${var.project_name}"`
+    renders literally, uninterpolated) — validating deviation 1's `format()` fix
+    in `budget.tf` was necessary, not just defensive.
+  - Read `docs/00-architecture-and-decisions.md` §5 (Cost envelope) — the one
+    listed Phase 0 Input the original pass never actually opened — and diffed
+    every dollar figure in `terraform.tfvars.example` against it line by line
+    (NAT ~$99/~$33, bootstrap nodes ~$49/~$25, flow logs ~$5–20, control-plane
+    logs ~$5–30, VPC endpoints +$263, idle totals ~$245/~$165). All matched
+    exactly; no change needed.
+  - Found and fixed a real gap: `Makefile`'s `destroy` target didn't satisfy
+    §0.10 rule 2's second clause (fail with a message pointing at G-09 before
+    Phase 8 lands, not a bare shell error) — see deviation 7. Verified the fix
+    (`make destroy` now prints the G-09 pointer and exits 1) and re-ran
+    `make check`, still green.
+  - Resolved the `nodepool_capacity_types` / `reserved` discrepancy the original
+    pass had deliberately left open — see deviation 5.
+  - Verified `git log`/`git show` that the only file this phase's commit touched
+    outside the literal "Files to create" list was `interface-contract.md` (the
+    `namespace_quota` row), matching the original report.
+  - No AWS credentials used or required at any point.
+
 - Notes for the next phase:
   - Resolved provider versions in this environment: `hashicorp/aws` 6.60.0,
     `hashicorp/tls` 4.3.0, `hashicorp/time` 0.14.1 — all satisfy the `~>`
@@ -791,8 +836,9 @@ and stop. Do not start Phase 1.
     was current as of 2026-08-11; these are newer compatible patch/minor
     releases). `.terraform.lock.hcl` is committed for both `terraform/` and
     `terraform/bootstrap/`.
-  - **The `nodepool_capacity_types` / `reserved` discrepancy (deviation 5 above)
-    needs a decision before or during Phase 5.**
+  - The `nodepool_capacity_types` / `reserved` discrepancy (deviation 5 above) is
+    resolved: the variable intentionally accepts only `spot`/`on-demand`, matching
+    Phase 5's design. No action needed in Phase 5 beyond what §5.3a already says.
   - `namespace_quota`'s snake_case→camelCase field mapping into Helm values is
     Phase 5's job when it renders `modules/cluster-resources/chart`'s values.
   - Phase 1 should find no `modules/` directory — confirmed absent, as required.
