@@ -63,7 +63,10 @@ dropped:
 - [ ] R27 — all six pillars covered, with tags and trade-offs
 - [ ] R28 — the three-tier model is structural, not a passing mention
 
-Then verify Appendix A: every row points at a section that exists, with the correct number.
+Appendix A (Requirement Traceability) was removed from the deliverable by explicit human instruction
+on 2026-08-16 — see `STATE.md`'s Plan amendments — so do not check for it, and do not re-add it.
+Requirement coverage for R1–R28 is still verified above, against the body and §10/Appendix B directly,
+not against a traceability table.
 
 ### Pass 2 — Cross-section consistency (severe if it fails)
 

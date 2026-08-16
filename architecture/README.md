@@ -18,9 +18,7 @@ Prepared for Innovate Inc. | Version 1.0
 - [8. Growth Roadmap](#8-growth-roadmap)
 - [9. Well-Architected Framework Alignment](#9-well-architected-framework-alignment)
 - [10. Summary of Key Decisions](#10-summary-of-key-decisions)
-- [Appendix A — Requirement Traceability](#appendix-a--requirement-traceability)
 - [Appendix B — Architecture Decision Records](#appendix-b--architecture-decision-records)
-- [Appendix C — Diagrams](#appendix-c--diagrams)
 - [Appendix D — Glossary](#appendix-d--glossary)
 
 ## Executive Summary
@@ -119,9 +117,12 @@ flowchart LR
 | Grey (`external`) | Outside the system — end users and DNS resolution |
 
 > **Note.** Non-production accounts, VPC endpoints, EKS add-ons, and subnet detail are omitted here
-> for legibility; see Appendix C for the full diagram set.
+> for legibility; see the account topology, network topology, and CI/CD pipeline diagrams in §1.3,
+> §2.2, and §3.9.
 
-Source: [diagrams/01-high-level.md](diagrams/01-high-level.md)
+Source: [diagrams/01-high-level.md](diagrams/01-high-level.md). All five diagram sources — including
+the authenticated request flow, not otherwise embedded in this document — are Mermaid files under
+[`diagrams/`](diagrams/).
 
 Six decisions carry the largest, hardest-to-reverse consequences:
 
@@ -1298,44 +1299,6 @@ traceable in one place, not to repeat the argument.
 
 ---
 
-## Appendix A — Requirement Traceability
-
-Every requirement in the client's requirements register maps below to the section that answers it, now
-cited by the final chapter numbers the assembled document actually uses.
-
-| ID | Requirement | Source | Answered in |
-|---|---|---|---|
-| R1 | Recommend the optimal number and purpose of AWS accounts | Area 1 | §1 Cloud Environment Structure |
-| R2 | Justify the account choice against isolation, billing, and management | Area 1 | §1 Cloud Environment Structure |
-| R3 | Design the VPC architecture | Area 2 | §2 Network Design |
-| R4 | Describe how the network is secured | Area 2 | §2 Network Design; §5 Security and Data Protection |
-| R5 | Detail how managed Kubernetes deploys and manages the application | Area 3 | §3 Compute Platform |
-| R6 | Approach to node groups | Area 3 | §3 Compute Platform |
-| R7 | Approach to scaling | Area 3 | §3 Compute Platform |
-| R8 | Approach to resource allocation within the cluster | Area 3 | §3 Compute Platform |
-| R9 | Containerization strategy — image building | Area 3 | §3 Compute Platform |
-| R10 | Containerization strategy — registry | Area 3 | §3 Compute Platform |
-| R11 | Containerization strategy — deployment processes | Area 3 | §3 Compute Platform |
-| R12 | Recommend the PostgreSQL service and justify it | Area 4 | §4 Database |
-| R13 | Database backups | Area 4 | §4 Database |
-| R14 | Database high availability | Area 4 | §4 Database |
-| R15 | Database disaster recovery (distinct from HA) | Area 4 | §4 Database |
-| R16 | Deliverable lives under `architecture/` | Deliverables | Document location — `architecture/README.md` |
-| R17 | A README architecture document | Deliverables | This document; Executive Summary |
-| R18 | At least one High-Level Diagram | Deliverables | Executive Summary — High-Level Architecture; Appendix C — Diagrams |
-| R19 | Solution is robust | Description | §6 Observability and Operations |
-| R20 | Solution is scalable — hundreds → millions of users | Description | §8 Growth Roadmap |
-| R21 | Solution is secure — sensitive user data | Description | §5 Security and Data Protection |
-| R22 | Solution is cost-effective | Description | §7 Cost Optimization |
-| R23 | CI/CD is supported | Description | §3 Compute Platform |
-| R24 | Readable by a client with limited cloud experience | Description | Executive Summary; Appendix D — Glossary |
-| R25 | Follows best practices | Description | §9 Well-Architected Framework Alignment |
-| R26 | Every decision is justified, with alternatives and consequences, in language the client can follow | Engagement standard | §10 Summary of Key Decisions; Appendix B — Architecture Decision Records |
-| R27 | Design aligns to the AWS Well-Architected Framework, all six pillars | Engagement standard | §9 Well-Architected Framework Alignment |
-| R28 | Design is presented as a three-tier architecture (presentation, application, data) | Engagement standard | §0 Scope, Assumptions and Design Principles |
-
----
-
 ## Appendix B — Architecture Decision Records
 
 An Architecture Decision Record (ADR) captures one significant decision in a fixed structure: the
@@ -1753,84 +1716,6 @@ see the AWS Pricing Calculator.
 
 **Revisit when.** The business no longer needs to economize this hard, or an enterprise customer
 contractually requires a staging environment that mirrors production.
-
----
-
-## Appendix C — Diagrams
-
-Diagram 5 is reproduced below — the sequence one authenticated request actually takes, the complement
-to the High-Level Diagram (HLD) in the Executive Summary, which shows the system's shape rather than
-one request's path. All five diagrams are Mermaid source files under `diagrams/`.
-
-### Authenticated Request Flow
-
-Start at the top and follow one authenticated request across all three tiers, past the AWS Web
-Application Firewall (WAF) evaluation, then compare it to the second, shorter path below for a
-cached static asset — proof the presentation tier answers without ever waking the application tier.
-Every hop after CloudFront is still separately encrypted, with its own TLS termination point named
-in a note.
-
-```mermaid
-sequenceDiagram
-  participant browser as "Browser"
-  participant cf as "Amazon CloudFront"
-  participant waf as "AWS WAF"
-  participant s3 as "Amazon S3 origin"
-  participant alb as "Application Load Balancer"
-  participant pod as "Flask API pod"
-  participant proxy as "Amazon RDS Proxy"
-  participant aurora as "Aurora PostgreSQL writer"
-
-  browser->>cf: GET /api/orders, TLS 1.2+
-  Note over browser,cf: TLS terminates at the CloudFront edge
-  cf->>waf: evaluate against managed rule groups
-  alt request blocked
-    waf-->>browser: 403 Forbidden
-  else request allowed
-    waf-->>cf: allow
-    cf->>alb: forward /api/*, re-encrypted
-    Note over cf,alb: TLS re-terminated at the ALB with an ACM certificate
-    alb->>pod: HTTPS to pod ENI, IP target mode
-    Note over alb,pod: TLS terminated at the pod via a cert-manager certificate
-    pod->>proxy: query, sslmode=verify-full
-    proxy->>aurora: hold connection, forward query
-    aurora-->>proxy: result set
-    proxy-->>pod: result set
-    pod-->>alb: 200 OK JSON
-    alb-->>cf: 200 OK
-    cf-->>browser: 200 OK JSON
-  end
-
-  Note over browser,s3: Static asset — cache-hit alternative path
-  browser->>cf: GET /static/app.js
-  alt cached at the edge
-    cf-->>browser: 200 OK, served from edge cache
-  else cache miss
-    cf->>s3: fetch via origin access control
-    s3-->>cf: asset
-    cf-->>browser: 200 OK, now cached at the edge
-  end
-```
-
-**Legend**
-
-| Element | Meaning |
-|---|---|
-| Solid arrow | A request — a synchronous call to the next hop |
-| Dashed arrow | A response — the answer flowing back |
-| `alt` / `else` block | A branch — the WAF verdict, or a cache hit versus a cache miss |
-| `Note` | Where TLS terminates or re-terminates along the path |
-
-> **Note.** Aurora's failover to the reader, and RDS Proxy's connection retention during it, are
-> described in §4 Database and not repeated here.
-
-| Diagram | File | Shows |
-|---|---|---|
-| 1 — High-Level Diagram | [`diagrams/01-high-level.md`](diagrams/01-high-level.md) | The whole system on one page, organized by tier — embedded in the Executive Summary |
-| 2 — Account and OU Topology | [`diagrams/02-account-topology.md`](diagrams/02-account-topology.md) | The seven accounts, their organizational units, and where SCPs attach |
-| 3 — Production Network Topology | [`diagrams/03-network-topology.md`](diagrams/03-network-topology.md) | Every subnet tier across three Availability Zones, with CIDRs |
-| 4 — CI/CD Pipeline | [`diagrams/04-cicd-pipeline.md`](diagrams/04-cicd-pipeline.md) | Every refusal point between a commit and production traffic |
-| 5 — Authenticated Request Flow | [`diagrams/05-request-flow.md`](diagrams/05-request-flow.md) | One request traced across all three tiers, embedded above |
 
 ---
 
