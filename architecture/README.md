@@ -93,6 +93,8 @@ We start Innovate Inc.'s cloud environment as **seven AWS accounts** inside a si
 (`innovate-inc`) managed by AWS Control Tower, in four organizational units (OUs), with two further
 accounts pre-planned. Seven is where isolation, billing, and management each get a real boundary.
 
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence
+
 ### 1.1 Why multiple accounts
 
 The account is the only AWS boundary bounding identity and access management (IAM), service quotas,
@@ -236,6 +238,8 @@ fails silently.
 Innovate Inc.'s network enforces the three-tier model in §0.2 inside a VPC per environment: network
 placement keeps the presentation tier public, the application tier reachable only from the ALB, and
 the data tier reachable only from the application tier.
+
+> **Well-Architected pillars.** Security · Reliability · Performance Efficiency · Cost Optimization
 
 ### 2.1 Principles and IP address plan
 
@@ -405,6 +409,8 @@ internet-facing entry point, CloudFront, and every hop after it stays encrypted:
 
 Innovate Inc.'s **application tier** — the Flask REST API and its background workers — runs on Amazon
 EKS inside the Private — App subnets of §2.2, reachable only from the ALB.
+
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence · Cost Optimization
 
 ### 3.1 Why Amazon EKS
 
@@ -621,6 +627,8 @@ Innovate Inc.'s data tier — the third tier of the three-tier model in §0.2 �
 PostgreSQL-Compatible Edition**, using **Aurora Serverless v2** capacity units, fronted by **Amazon RDS
 Proxy**, inside the Private — Data subnets established in §2.2.
 
+> **Well-Architected pillars.** Reliability · Security · Performance Efficiency · Cost Optimization
+
 ### 4.1 Recommendation and alternatives considered
 
 Self-managed PostgreSQL on EC2 is cheapest on paper, wrong for a team with no database administrator —
@@ -725,6 +733,8 @@ RTO; next is a warm standby, then active-active (§8).
 Security is a property already built into §1–§4 — SCPs, private subnets, Pod Security Admission, image
 signing, encryption at rest — since any single control eventually fails.
 
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence
+
 ### 5.1 Security model
 
 Defense in depth spans every layer: organization guardrails and identity (§1), network (§2), workload
@@ -814,6 +824,8 @@ Innovate Inc.'s operating question is not whether a server is up; it is whether 
 they asked for, and if not, which tier is failing them — fewer signals, each answering one specific
 question, beat a wall of graphs nobody reads at 2am.
 
+> **Well-Architected pillars.** Operational Excellence · Reliability · Performance Efficiency · Cost Optimization
+
 ### 6.1 Observability strategy
 
 Each tier fails differently and is watched differently: presentation through edge metrics and
@@ -869,6 +881,8 @@ restore, scaling a spike, revoking a credential, DR failover (§4.6).
 
 "Cost-effective" is one of four adjectives Innovate Inc. used to describe what it wants; this chapter
 treats cost like security — a property of the design, priced honestly.
+
+> **Well-Architected pillars.** Cost Optimization · Operational Excellence · Reliability · Sustainability
 
 ### 7.1 What this architecture costs
 
@@ -971,6 +985,8 @@ The decisions expensive to change later were made for stage 4 on day one: the ac
 (§4.1). Everything else is meant to change, and this chapter says when — priced, at each stage, in
 §7.3.
 
+> **Well-Architected pillars.** Reliability · Performance Efficiency · Cost Optimization · Operational Excellence
+
 ### 8.1 Stages and triggers
 
 | Stage | Scale | What changes | Trigger |
@@ -1001,6 +1017,8 @@ was chosen for stage 4 on day one.
 
 The Well-Architected Framework is used here as a design tool applied to decisions already made in
 §0–§8 — naming a pillar forces an honest statement of what a decision leaned toward and gave up.
+
+> **Well-Architected pillars.** Security · Reliability · Operational Excellence · Cost Optimization
 
 ### 9.1 Operational Excellence
 
