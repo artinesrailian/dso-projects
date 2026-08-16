@@ -210,15 +210,7 @@ kubectl get nodes -l karpenter.sh/nodepool # consolidated away
 ```text
 Implement Phase 10 (OPTIONAL) of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/dso-projects/terraform
-
-SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
-     Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
-     UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
-  3. Create NOTHING at the repository root. Everything lives under terraform/.
-  4. Do not run repo-wide searches. Scope every search to terraform/.
+Working directory: terraform/
 
 Read, in this order:
   1. docs/phases/phase-10-optional-metrics-hpa.md   (your specification)
@@ -247,11 +239,4 @@ docs/phases/phase-10-optional-metrics-hpa.md and stop.
 
 ---
 
-## Completion report
-
-- Status:
-- Files created/changed:
-- **HPA arithmetic** (replicas × request vs node capacity vs NodePool limit vs account quota):
-- Deviations from spec:
-- **Actual scale-up output, if applied:**
-- Notes:
+*This optional phase was not implemented. See `docs/README.md` for what was built and what was skipped.*

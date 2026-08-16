@@ -261,21 +261,7 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=200 | gre
 ```text
 Implement Phase 4 of the EKS + Karpenter Terraform assessment.
 
-Working directory: /home/artin/personal/git/dso-projects/terraform
-
-SCOPE BOUNDARY — non-negotiable, applies to every action you take:
-  1. Your working directory is /home/artin/personal/git/dso-projects/terraform. You never leave it.
-     Every path in this prompt and in every doc it references is RELATIVE TO THAT DIRECTORY.
-  2. The sibling directory /home/artin/personal/git/dso-projects/architecture is a DIFFERENT,
-     UNRELATED assessment. Do not read it, write to it, list it, grep it, or cd into it.
-     There is nothing in it you need.
-  3. Create NOTHING at the repository root (/home/artin/personal/git/dso-projects) — no new files,
-     no new directories, no sibling of terraform/ or architecture/. Everything you produce
-     lives under terraform/. That includes .gitignore, CI config, scripts and notes.
-  4. Do not run commands that walk the whole repo (`find /home/artin/personal/git/dso-projects`,
-     `grep -r` from the root, `git status` at the root). Scope every search to terraform/.
-  If you believe you genuinely need something outside terraform/, stop and say so in your
-  completion report instead of doing it.
+Working directory: terraform/
 
 Read these files first, in this order:
   1. docs/reference/version-pinning.md          (§2.1 WHY there are two charts,
@@ -404,7 +390,7 @@ and stop. Do not start Phase 5.
      `validate` erroring "Module not installed" (a symptom, not the cause) and by then checking
      `pwd`. Fix: deleted both stray artifacts, confirmed `git status` showed only the intended file
      changes, re-ran `fmt -check` / `init -backend=false` / `validate` from
-     `/home/artin/personal/git/dso-projects/terraform` using `terraform -chdir=...` and absolute
+     `terraform` using `terraform -chdir=...` and absolute
      paths, and re-verified the root `.terraform.lock.hcl` still carries all six providers (`aws`,
      `helm`, `tls`, `time`, `null`, `cloudinit`) after the fix. All acceptance-criteria commands
      reported in this section were the post-cleanup, correct-directory runs.
@@ -429,7 +415,7 @@ and stop. Do not start Phase 5.
   signature (added there by Phase 3's own reservation of the full 7-output contract); this phase
   only implements it.
 
-- Verification run (all from `/home/artin/personal/git/dso-projects/terraform`, no AWS credentials
+- Verification run (all from `terraform`, no AWS credentials
   used or required):
   - `terraform fmt -check -recursive` → clean (exit 0), both before and after the final
     `outputs.tf` comment fix.

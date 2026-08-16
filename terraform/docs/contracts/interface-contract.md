@@ -11,24 +11,10 @@ together. This contract exists to prevent that. Names below are exact, case-sens
 
 ---
 
-## 1. Repository layout and scope boundary
+## 1. Repository layout
 
-### 🛑 Scope boundary — read this first
-
-The repository root contains **two unrelated assessments**:
-
-```
-opsfleet/
-├── architecture/     ← A DIFFERENT ASSESSMENT. OUT OF SCOPE. DO NOT READ, WRITE, OR LIST IT.
-└── terraform/        ← THIS assessment. Your entire working directory.
-```
-
-**Every agent working on this assessment operates with `terraform/` as its working directory and
-never leaves it.** Do not read, write, list, search, or `cd` into `architecture/` or any other
-path outside `terraform/`. It contains an unrelated submission; touching it wastes context and
-risks corrupting someone else's work. There is nothing in it you need.
-
-All paths in every document in `docs/` are **relative to `terraform/`**.
+Everything this assessment produces lives under `terraform/`, and all paths in every document in
+`docs/` are **relative to `terraform/`**.
 
 ### Inside `terraform/`
 
