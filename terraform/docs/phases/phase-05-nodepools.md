@@ -713,11 +713,193 @@ and stop. Do not start Phase 6.
 
 ## Completion report
 
-*To be filled in by the implementing agent.*
+- Status: DONE — every "Without credentials" acceptance criterion passes, including all seven
+  positive greps and both negative (leakage) greps, which find nothing outside comments. Every
+  item in `karpenter-api-reference.md` §8's footgun checklist was checked against the rendered
+  output. The "With credentials" acceptance criteria are unverified — no AWS credentials were
+  available, per the task's instruction not to run `terraform apply`. **Reviewed 2026-08-16:**
+  an independent review re-ran the full "Without credentials" acceptance criteria and re-checked
+  every item in `karpenter-api-reference.md` §8's footgun checklist against fresh `helm template`
+  output, plus the §5.4 contract gap-fix and the §5.3c/§5.3d RBAC/quota objects — all PASS, zero
+  code or contract changes required. The review found two reporting-only defects in this
+  completion report, both corrected here: (1) Deviation #1 claimed `helm lint` enforces
+  `Chart.yaml`'s `name` matching the chart directory's basename — false, empirically disproven
+  with Helm v3.19.0 (`helm lint`, `helm lint --strict`, and `helm package` all pass with a
+  mismatched name); the rationale is corrected below, `Chart.yaml`'s `name: chart` is unchanged
+  since the deviation itself is harmless. (2) The `variables.tf` files-created bullet said "13
+  inputs" when the file (and interface-contract §5.4's amended table) actually has 16; corrected
+  below. No blockers found.
 
-- Status:
 - Files created/changed:
+  - `modules/cluster-resources/versions.tf` — **new.** Only `helm` in `required_providers`
+    (`~> 3.2`, matching every other module), no `provider` block, no `aws` entry — this module has
+    no AWS resources of its own. Mirrors `modules/karpenter/versions.tf`'s pattern.
+  - `modules/cluster-resources/variables.tf` — **new.** 16 inputs per interface-contract §5.4 as
+    amended (the 13 rows the table already had, plus the three added in this change).
+  - `modules/cluster-resources/main.tf` — **new.** `locals.arm64_weight`/`amd64_weight` (from
+    `var.default_arch`) and `locals.enabled_pool_count`; the single `helm_release.cluster_resources`
+    resource, `depends_on = [var.karpenter_helm_release_name]`, `values = [yamlencode({...})]`
+    covering `clusterName`/`nodeIamRoleName`/`amiAlias`/`capacityTypes`/`cpuLimitPerPool`/
+    `memoryLimitPerPool`/`tags`/`amd64.*`/`arm64.*`/`governedNamespaces`/`namespaceQuota.*`
+    (snake_case→camelCase mapped here)/`developerRbacGroup`; and the §5.3c
+    `lifecycle.precondition` tying `developer_namespaces` to `governed_namespaces`.
+  - `modules/cluster-resources/outputs.tf` — **new.** `storage_class_name` (literal `"gp3"`),
+    `governed_namespace_names` (`var.governed_namespaces`), `nodepool_names` (`compact()` over
+    `enable_arm64`/`enable_amd64`), `ec2nodeclass_name` (literal `"default"`).
+  - `modules/cluster-resources/README.md` — **new.** Module purpose, the default-arch trade-off
+    (§5.5) with the `buildx` command and the `default_arch="amd64"` escape hatch, why the
+    StorageClass lives here (ADR-6, §2.5b), a pointer to §5.3d for the RBAC boundary rather than
+    duplicating it, and a Helm-values table.
+  - `modules/cluster-resources/chart/Chart.yaml` — **new.** `name: chart` (see Deviation #1).
+  - `modules/cluster-resources/chart/values.yaml` — **new.** Standalone-complete defaults for every
+    key the templates read, so `helm lint`/`helm template` succeed with zero `--set` flags.
+  - `modules/cluster-resources/chart/templates/ec2nodeclass.yaml` — **new.** §2's YAML, `role` (not
+    `instanceProfile`), single `alias` term, explicit `metadataOptions`, `blockDeviceMappings` with
+    re-stated `encrypted: true` and quoted `"50Gi"`, and `tags` built via a single `merge()`+`toYaml`
+    (see Deviation #2).
+  - `modules/cluster-resources/chart/templates/nodepools.yaml` — **new.** Both `amd64`/`arm64`
+    NodePools, each guarded by `{{- if .Values.<arch>.enabled }}`, `disruption` setting both
+    `consolidationPolicy` and `consolidateAfter` (G-17), `expireAfter: 720h`, `budgets: [{nodes:
+    "10%"}]`, category/generation/cpu requirements (no hardcoded instance-type list).
+  - `modules/cluster-resources/chart/templates/storageclass.yaml` — **new.** Copied verbatim from
+    phase-02 §2.5b, `volumeBindingMode: WaitForFirstConsumer` intact, with the ADR-6 comment §5.3b
+    asks for.
+  - `modules/cluster-resources/chart/templates/namespaces.yaml` — **new.** §5.3c's
+    Namespace/ResourceQuota/LimitRange range plus §5.3d's ClusterRole and per-namespace
+    RoleBinding, copied close to verbatim (multi-doc, `---`-separated), per the file-list note that
+    there is no separate `rbac.yaml`.
+  - `main.tf` (root) — added the `module "cluster_resources"` block (4th module block, after
+    `module.karpenter`); rewrote the header comment from forward-looking to present-tense.
+  - `docs/contracts/interface-contract.md` — §5.4's input table amended in place: added
+    `memory_limit_gi`, `developer_namespaces`, `tags` rows (see below).
+
 - Deviations from spec:
-- Names added to interface-contract.md:
-- Verification run (paste the rendered `helm template` assertions):
-- Notes for the next phase:
+  1. `Chart.yaml`'s `name` is `chart`, matching the directory the file list fixes at
+     `modules/cluster-resources/chart/`. This is cosmetic, not enforced: an earlier draft of this
+     report claimed `helm lint` requires `Chart.yaml`'s `name` to equal the chart directory's
+     basename — that is false, and was corrected during the 2026-08-16 review (see the Reviewed
+     note in Status). Verified directly with Helm v3.19.0: `helm lint`, `helm lint --strict`, and
+     `helm package` all pass cleanly against this chart directory even with a mismatched
+     `Chart.yaml` `name` (e.g. `name: cluster-resources` in a directory named `chart`). The Helm
+     *release* name is set by Terraform (`name = "cluster-resources"` in
+     `helm_release.cluster_resources`) and is what actually appears in `helm list`/`helm
+     history` — nothing depends on the in-chart name.
+  2. `EC2NodeClass.spec.tags` is built with `merge(dict("Name", ..., "ManagedBy", "karpenter"),
+     .Values.tags)` + a single `toYaml`, not §2's literal static block followed by a separate render
+     of `.Values.tags`. `local.tags` already carries `ManagedBy: terraform`; emitting §2's hardcoded
+     `ManagedBy: karpenter` line *and* `.Values.tags` as two separate map fragments would produce a
+     duplicate `ManagedBy` key in the same YAML map, which fails to parse. The merge produces one
+     map, with `Name`/`ManagedBy=karpenter` as the merge *destination* so they win over any
+     same-keyed entry from `.Values.tags` (sprig `merge` gives destination-dict keys precedence) —
+     confirmed by rendering: `tags: {ManagedBy: karpenter, Name: test-karpenter-node}`, i.e. §2's
+     `ManagedBy: karpenter` intent survives even though `local.tags` carries a different value for
+     the same key.
+  3. Noted per the task's own instruction, not something introduced here: §5.1's `yamlencode`
+     example and the "Acceptance criteria" section disagree on the values key name (`cpuLimitPerPool`
+     vs. `--set cpuLimit=100`). §5.1's code (the normative `helm_release` implementation) was
+     followed literally — the actual template/values key is `cpuLimitPerPool`/`memoryLimitPerPool`.
+     `--set cpuLimit=100` in the acceptance script is an inert unknown key Helm silently accepts; it
+     does not affect any of that script's grep assertions, all confirmed passing below.
+  4. §5.1's own `yamlencode` block, copied literally, emits only 9 keys (`clusterName`,
+     `nodeIamRoleName`, `amiAlias`, `capacityTypes`, `cpuLimitPerPool`, `memoryLimitPerPool`, `tags`,
+     `amd64`, `arm64`) — it does not emit `governedNamespaces`, `namespaceQuota`, or
+     `developerRbacGroup`, even though `namespaces.yaml` (§5.3c/§5.3d, required by the same phase
+     doc) reads all three. `main.tf`'s `values` block was extended with those three keys beyond
+     §5.1's literal example; omitting them would render `namespaces.yaml` as an empty no-op while
+     every acceptance grep (which only checks NodePool/EC2NodeClass strings) still passed.
+  5. `chart/values.yaml` was given full standalone defaults for every value key the templates read
+     (`governedNamespaces: [demo]`, all five `namespaceQuota.*` fields, `developerRbacGroup`, etc.),
+     not only `cpuLimitPerPool`/`memoryLimitPerPool` as the task's inconsistency note called out —
+     the first "Without credentials" acceptance command (`helm lint ... --set clusterName=test --set
+     nodeIamRoleName=test-role`, no other flags) would otherwise nil-pointer on
+     `.Values.namespaceQuota.requestsCpu` during template rendering.
+  6. Each `NodePool` is wrapped in `{{- if .Values.<arch>.enabled }}` so a disabled pool is not
+     rendered at all (Karpenter has no per-NodePool enable/disable field) — needed to make
+     `outputs.tf`'s `nodepool_names` (driven by `enable_amd64`/`enable_arm64`) match what the chart
+     actually creates. Not spelled out as a template detail in §5.3/§5.4's YAML but required for the
+     module contract's `enable_amd64`/`enable_arm64` inputs to mean anything.
+
+- Names added to interface-contract.md (§5.4's `modules/cluster-resources` input table):
+  1. `memory_limit_gi` (`number`) — total memory ceiling (GiB) across all enabled NodePools, divided
+     by `local.enabled_pool_count` to compute `memoryLimitPerPool`. Root variable
+     `nodepool_memory_limit_gi` already existed; this wires it into the module.
+  2. `developer_namespaces` (`list(string)`) — the namespaces Phase 2's access entries are scoped
+     to. Not consumed by any resource attribute in this module (`modules/eks`'s access entries carry
+     no `policy_associations`, hence no `access_scope`); consumed only by
+     `helm_release.cluster_resources`'s `lifecycle.precondition`, which is the actual enforcement
+     point tying access to governance.
+  3. `tags` (`map(string)`) — every other local module (`network`, `eks`, `karpenter`) already takes
+     this input per interface-contract §2.2's rule that every module receives `local.tags`; §5.4's
+     table simply omitted the row for `cluster-resources` even though §5.1's own example code uses
+     `tags = var.tags`.
+
+- Verification run:
+  ```
+  $ terraform fmt -check -recursive
+  (no output — clean)
+
+  $ terraform init -backend=false -input=false
+  Terraform has been successfully initialized!
+
+  $ terraform validate
+  Success! The configuration is valid.
+
+  $ cd modules/cluster-resources && helm lint ./chart --set clusterName=test --set nodeIamRoleName=test-role
+  ==> Linting ./chart
+  [INFO] Chart.yaml: icon is recommended
+  1 chart(s) linted, 0 chart(s) failed
+
+  $ R=$(helm template ./chart --set clusterName=test --set nodeIamRoleName=test-role \
+       --set amiAlias=al2023@latest --set cpuLimit=100)
+  $ echo "$R" | grep -q 'karpenter.sh/v1'      && echo "PASS: NodePool API version"
+  PASS: NodePool API version
+  $ echo "$R" | grep -q 'karpenter.k8s.aws/v1' && echo "PASS: EC2NodeClass API version"
+  PASS: EC2NodeClass API version
+  $ echo "$R" | grep -q 'consolidateAfter'     && echo "PASS: G-17 avoided"
+  PASS: G-17 avoided
+  $ echo "$R" | grep -q 'httpTokens: required' && echo "PASS: IMDSv2"
+  PASS: IMDSv2
+  $ echo "$R" | grep -q 'encrypted: true'      && echo "PASS: EBS encryption"
+  PASS: EBS encryption
+  $ echo "$R" | grep -q 'limits'               && echo "PASS: blast radius capped"
+  PASS: blast radius capped
+  $ echo "$R" | grep -qE 'volumeSize: *"?[0-9]+Gi' && echo "PASS: volumeSize has a unit"
+  PASS: volumeSize has a unit
+  $ echo "$R" | grep -vE '^[[:space:]]*#' | grep -i 'Balanced'
+  (no output — PASS)
+  $ echo "$R" | grep -vE '^[[:space:]]*#' | grep 'instanceProfile'
+  (no output — PASS)
+  ```
+  Also checked, beyond the script's own assertions: `grep -c 'kind: Namespace'` = 1,
+  `grep -c 'kind: NodePool'` = 2 (`amd64` and `arm64`), `kind: RoleBinding`, `kind: ClusterRole`,
+  and `kind: StorageClass` all present. Cross-checked every box in
+  `karpenter-api-reference.md` §8 against the rendered output — all satisfied. Confirmed
+  `grep -rn "instanceProfile|Balanced|terminationGracePeriod|spec.replicas"` across
+  `modules/cluster-resources/` finds no live use, only two comment lines (`variables.tf`'s
+  `node_iam_role_name` description and `ec2nodeclass.yaml`'s own explanatory comment, both of
+  which mention `instanceProfile` only to say it is not used).
+
+  The `depends_on = [var.karpenter_helm_release_name]` ordering edge (the one thing G-19 exists to
+  prevent, and the one thing none of the above actually proves) was verified statically:
+  ```
+  $ terraform graph | grep -i cluster_resources
+    "module.cluster_resources.helm_release.cluster_resources" -> "module.karpenter.helm_release.karpenter";
+    "module.cluster_resources.helm_release.cluster_resources" -> "module.karpenter.module.karpenter.aws_iam_role.node";
+  ```
+  Confirms the string-reference `depends_on` pattern does propagate through the module-input
+  reference graph to `helm_release.karpenter`, as the task specified it would — no substitute
+  dependency mechanism was needed. (`terraform graph` required a real, if throwaway, backend to run
+  under this Terraform version — a local `override.tf` pointing at a scratch state file, created and
+  deleted for this one check only; no state was ever written for the S3 backend, and `override.tf`
+  is not part of the committed change.)
+
+- Notes for the next phase: Phase 6 (`examples/`) should target the `demo` namespace this module
+  creates — do not `kubectl create namespace demo` (it would be unlabelled and unquota'd, silently
+  disabling the PSA/quota/limit-range controls this phase built). `governed_namespaces` and
+  `developer_namespaces` both default to `["demo"]`, so no `.tfvars` change is needed for the default
+  single-namespace demo. Root outputs.tf deliberately does not surface
+  `module.cluster_resources`'s four outputs (`storage_class_name`, `governed_namespace_names`,
+  `nodepool_names`, `ec2nodeclass_name`) — interface-contract §4 does not list them, following the
+  same precedent Phase 4 set for `helm_release_name`. If a later phase's `verify.sh` or README wants
+  one of them at the root, add it to interface-contract §4 in that phase's own change rather than
+  assuming it is already there.

@@ -338,13 +338,16 @@ signature exactly, because a later phase is already written against it.
 | in | `node_ami_alias` | `string` — e.g. `al2023@latest` |
 | in | `capacity_types` | `list(string)` |
 | in | `cpu_limit` | `number` |
+| in | `memory_limit_gi` | `number` — total memory ceiling (GiB) across all enabled NodePools, divided by `local.enabled_pool_count` to compute `memoryLimitPerPool`. Required so every NodePool carries both a cpu AND a memory limit (S-52) |
 | in | `default_arch` | `string` — `arm64` or `amd64`; decides the NodePool weights |
 | in | `enable_amd64` | `bool` |
 | in | `enable_arm64` | `bool` |
 | in | `governed_namespaces` | `list(string)` |
+| in | `developer_namespaces` | `list(string)` — the namespaces Phase 2's access entries are scoped to; not consumed by any resource (modules/eks's access entries carry no policy_associations), only by this module's `lifecycle.precondition` tying it to `governed_namespaces` |
 | in | `developer_rbac_group` | `string` — the group the developer ClusterRole is bound to |
 | in | `namespace_quota` | `object` |
 | in | `karpenter_helm_release_name` | `string` — used only as a `depends_on` edge so the CRDs exist first |
+| in | `tags` | `map(string)` — rendered into `EC2NodeClass.spec.tags`, the only way Karpenter-launched instances get cost-allocation tags |
 | out | `storage_class_name` | `string` — the default `gp3` StorageClass this chart also delivers (see phase-02 §2.5b) |
 | out | `governed_namespace_names` | `list(string)` — namespaces created with PSA labels, quota and limit range |
 | out | `nodepool_names` | `list(string)` |

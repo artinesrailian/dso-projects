@@ -1,0 +1,187 @@
+# Governed namespaces (§5.3c) and the developer RBAC boundary (§5.3d),
+# phase-05-nodepools.md. Created HERE, by Terraform, through the same chart
+# as the StorageClass, so that the guardrails a namespace needs (PSA labels,
+# ResourceQuota, LimitRange) can never lag behind the access Phase 2 grants
+# to it — see phase-05 §5.3c for the ordering bug this fixes. Full RBAC
+# boundary rationale (what is deliberately NOT granted, and what RBAC
+# structurally cannot reach) lives in phase-05-nodepools.md §5.3d and this
+# module's README — not duplicated here.
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ . }}
+  labels:
+    # In-tree Pod Security Admission. Terraform-managed, so `helm upgrade` on
+    # the next apply restores these if anyone strips them.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ResourceQuota
+metadata: { name: {{ . }}-quota, namespace: {{ . }} }
+spec:
+  hard:
+    # --- compute -----------------------------------------------------------
+    requests.cpu: {{ $.Values.namespaceQuota.requestsCpu | quote }}
+    requests.memory: {{ $.Values.namespaceQuota.requestsMemory | quote }}
+    limits.cpu: {{ $.Values.namespaceQuota.limitsCpu | quote }}
+    limits.memory: {{ $.Values.namespaceQuota.limitsMemory | quote }}
+
+    # --- storage: the expensive omission ------------------------------------
+    # The EBS CSI driver is installed and §2.5b ships a DEFAULT StorageClass,
+    # so a bare PVC provisions real EBS. gp3 tops out at 16 TiB (~$1,310/mo
+    # each) and a pod can mount ~25. Twenty volumes is ~$26,000/month while
+    # consuming 100m of the CPU quota. Worse, StatefulSet
+    # volumeClaimTemplates are RETAINED on delete and teardown.sh does not
+    # sweep EBS — the spend outlives the cluster. A quota with no storage
+    # dimension is not a cost control.
+    persistentvolumeclaims: "10"
+    requests.storage: 200Gi
+    gp3.storageclass.storage.k8s.io/requests.storage: 200Gi
+
+    # --- ephemeral storage ---------------------------------------------------
+    # An emptyDir with no sizeLimit fills the 50 GiB node root volume,
+    # triggers DiskPressure, and the kubelet evicts OTHER developers' pods
+    # off that node.
+    requests.ephemeral-storage: 20Gi
+    limits.ephemeral-storage: 40Gi
+
+    # --- object counts ---------------------------------------------------------
+    # count/deployments alone is trivially sidestepped: the Role also grants
+    # statefulsets, bare replicasets, jobs and cronjobs. A CronJob with
+    # `schedule: "* * * * *"` and concurrencyPolicy Allow is the classic
+    # accident. count/pods also bounds VPC IP consumption (ADR-1 sizes
+    # subnets for exactly this).
+    count/pods: "100"
+    count/deployments.apps: {{ $.Values.namespaceQuota.maxDeployments | quote }}
+    count/statefulsets.apps: "10"
+    count/replicasets.apps: "50"
+    count/jobs.batch: "20"
+    count/cronjobs.batch: "10"
+    count/services: "20"
+
+    # --- exposure -------------------------------------------------------------
+    services.loadbalancers: "0"
+    services.nodeports: "0"
+---
+apiVersion: v1
+kind: LimitRange
+metadata: { name: {{ . }}-limits, namespace: {{ . }} }
+spec:
+  limits:
+    - type: Container
+      # Karpenter sizes nodes from resource REQUESTS. A pod with none looks
+      # free, so Karpenter bin-packs it and it then fights real workloads for
+      # CPU and memory on a shared node. defaultRequest fixes the UNSET case.
+      defaultRequest: { cpu: 100m, memory: 128Mi, ephemeral-storage: 1Gi }
+      default: { cpu: "1", memory: 1Gi, ephemeral-storage: 2Gi }
+      max: { cpu: "4", memory: 8Gi, ephemeral-storage: 4Gi }
+      # `min` is what stops node-count amplification. defaultRequest applies
+      # ONLY when the field is unset — an explicit `cpu: 1m` is admitted
+      # without it. Combine that with a required podAntiAffinity on hostname
+      # (which phase-06's own example teaches, and which every "spread isn't
+      # working" answer online escalates to DoNotSchedule) and 50 replicas
+      # cost 50m of a 20-CPU quota while forcing 50 NODES — which
+      # consolidation can never reclaim, because the pods are structurally
+      # forbidden from sharing one. The NodePool limit caps vCPU, not node
+      # count.
+      min: { cpu: 50m, memory: 64Mi }
+    - type: Pod
+      # The largest admissible pod must fit the largest launchable node
+      # (instance-cpu tops out at 16), or it is unschedulable forever.
+      max: { cpu: "8", memory: 16Gi }
+    - type: PersistentVolumeClaim
+      max: { storage: 50Gi }
+      min: { storage: 1Gi }
+{{- end }}
+
+# The developer ClusterRole — what "zero trust" actually means here. Phase 2
+# binds developers to var.developer_rbac_group with NO AWS access policy;
+# this chart supplies the Kubernetes permissions. Grant only what deploying
+# and operating an application requires — the omissions are the point (full
+# table of what's deliberately withheld, and what RBAC structurally cannot
+# reach even so, in phase-05-nodepools.md §5.3d).
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.developerRbacGroup | replace ":" "-" }}
+rules:
+  # --- The job: ship and run a workload -------------------------------------
+  - apiGroups: ["apps"]
+    # deployments/rollback is deliberately absent — the subresource was
+    # removed from Kubernetes in 1.16 and granting it is dead weight.
+    resources: [deployments, replicasets, statefulsets,
+                deployments/scale, statefulsets/scale, replicasets/scale]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods, services, configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Observe your own workload --------------------------------------------
+  - apiGroups: [""]
+    resources: [pods/log, pods/status, events]
+    verbs: [get, list, watch]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: [pods] # NOT nodes — cluster-scoped, see below
+    verbs: [get, list] # kubectl top pods
+
+  # --- Follow the guidance we give them --------------------------------------
+  # The README tells developers to set a PodDisruptionBudget on a Spot
+  # cluster and phase-10 demos an HPA. Both must therefore be grantable.
+  - apiGroups: ["policy"]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Diagnose your own limits without opening a ticket ----------------------
+  - apiGroups: [""]
+    resources: [resourcequotas, limitranges]
+    verbs: [get, list, watch]
+
+  # --- Storage ----------------------------------------------------------------
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  # NOTE: storageclasses and metrics.k8s.io/nodes are CLUSTER-SCOPED. A
+  # ClusterRole bound by a RoleBinding cannot grant them — RBAC silently
+  # ignores such rules, so `kubectl get storageclass` is denied however it is
+  # written here. They are omitted rather than listed-and-dead. If
+  # developers need to read StorageClasses, that requires a separate,
+  # narrowly-scoped ClusterRoleBinding — a deliberate decision, not a line in
+  # this Role. The default StorageClass means they never have to name one.
+
+  # --- Debugging: a deliberate, bounded exception -----------------------------
+  # exec is genuinely needed to debug a container and is scoped to this
+  # namespace. Accept it knowingly: it lets a developer read any secret
+  # MOUNTED into any pod here, which is why per-team namespaces matter as
+  # soon as this carries more than one team's work.
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create, get]
+
+# Bound to the group, per governed namespace — a RoleBinding, so it cannot
+# leak cluster-wide.
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: developers, namespace: {{ . }} }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole # cluster-scoped definition...
+  name: {{ $.Values.developerRbacGroup | replace ":" "-" }}
+subjects:
+  - kind: Group # ...namespace-scoped binding
+    name: {{ $.Values.developerRbacGroup }}
+    apiGroup: rbac.authorization.k8s.io
+{{- end }}

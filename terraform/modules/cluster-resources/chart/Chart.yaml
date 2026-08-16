@@ -1,0 +1,9 @@
+apiVersion: v2
+name: chart
+description: >-
+  Karpenter NodePools/EC2NodeClass, the default gp3 StorageClass, and the
+  governed-namespace guardrails (Namespace/ResourceQuota/LimitRange/RBAC) for
+  the opsfleet EKS + Karpenter POC. See modules/cluster-resources/README.md.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

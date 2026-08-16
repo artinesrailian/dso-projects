@@ -1,0 +1,22 @@
+# Not a Karpenter resource — this stack has no `kubernetes` provider (ADR-6),
+# so the default gp3 StorageClass rides in this chart, the only Helm-delivered
+# path for cluster-scoped objects. See phase-02-eks-cluster.md §2.5b (verbatim
+# below) and this module's README for why it lives in "cluster-resources"
+# rather than a Karpenter-specific module.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: gp3
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"
+provisioner: ebs.csi.aws.com
+volumeBindingMode: WaitForFirstConsumer # REQUIRED with Karpenter: bind the volume
+                                         # only once a pod is scheduled, so the volume
+                                         # lands in the AZ Karpenter picked. Immediate
+                                         # binding creates volumes in the wrong AZ and
+                                         # the pod can never schedule.
+allowVolumeExpansion: true
+reclaimPolicy: Delete # POC. Use Retain where data matters.
+parameters:
+  type: gp3
+  encrypted: "true" # matches S-24/S-50: everything encrypted at rest
