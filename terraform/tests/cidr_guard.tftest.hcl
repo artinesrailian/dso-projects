@@ -4,7 +4,30 @@
 #
 # A check that cannot fail is worse than no check, because it prints PASS.
 
-mock_provider "aws" {}
+mock_provider "aws" {
+  # Phase 1's module.network needs a concrete AZ list — the default mock
+  # returns an empty `names`, and slice(names, 0, var.az_count) errors.
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names = ["us-east-1a", "us-east-1b", "us-east-1c"]
+    }
+  }
+
+  # Default mock leaves `json` as "", which fails the aws_iam_role schema's
+  # own "must be a valid JSON policy" check on the VPC module's flow-log role.
+  mock_data "aws_iam_policy_document" {
+    defaults = {
+      json = jsonencode({
+        Version = "2012-10-17"
+        Statement = [{
+          Effect    = "Allow"
+          Action    = "sts:AssumeRole"
+          Principal = { Service = "vpc-flow-logs.amazonaws.com" }
+        }]
+      })
+    }
+  }
+}
 
 # The guard must REJECT an internet-open endpoint.
 run "rejects_open_endpoint" {
