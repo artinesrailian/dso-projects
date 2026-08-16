@@ -195,7 +195,7 @@ constrained ones carry a `validation` block.
 | `developer_principal_arns` | `list(string)` | `[]` | IAM principals bound to the `developer_rbac_group` Kubernetes group via a `STANDARD` access entry with **no AWS managed access policy**. Permissions come from the ClusterRole in phase-05 §5.3d. Prefer SSO role ARNs over IAM users. |
 | `developer_namespaces` | `list(string)` | `["demo"]` | Namespaces the access entries are **scoped to**. Wildcards work (`team-*`); EKS does not validate they exist. |
 | `governed_namespaces` | `list(string)` | `["demo"]` | Namespaces Terraform **creates** with PSA `restricted` labels, a ResourceQuota and a LimitRange. Every non-wildcard entry in `developer_namespaces` must appear here — enforced by a precondition, because access without guardrails is the failure mode. |
-| `namespace_quota` | `object` | cpu 20 / mem 40Gi requests, 40 / 80Gi limits, 20 deployments, 0 loadbalancers | Per-namespace ResourceQuota. `services.loadbalancers = 0` stops a developer provisioning a public load balancer. |
+| `namespace_quota` | `object({ requests_cpu = string, requests_memory = string, limits_cpu = string, limits_memory = string, max_deployments = number })` | `{ requests_cpu = "20", requests_memory = "40Gi", limits_cpu = "40", limits_memory = "80Gi", max_deployments = 20 }` | Per-namespace ResourceQuota. Field names fixed by Phase 0 to match the 5 fields phase-05 §5.3c's chart template reads (`.Values.namespaceQuota.requestsCpu` etc — Phase 5 does the snake_case→camelCase mapping when it builds Helm values). `services.loadbalancers = "0"` is **not** driven by this variable — phase-05's chart template hardcodes it directly in the ResourceQuota, so a `loadbalancers`/`max_loadbalancers` field here would be unused. |
 | **Karpenter** ||||
 | `karpenter_version` | `string` | see `reference/version-pinning.md` | Helm chart version. |
 | `karpenter_namespace` | `string` | `"kube-system"` | |
@@ -212,7 +212,7 @@ constrained ones carry a `validation` block.
 | **NodePools** ||||
 | `nodepool_cpu_limit` | `number` | `100` | Total vCPU ceiling across all Karpenter NodePools. **Karpenter's `spec.limits` is per-NodePool**, so Phase 5 divides this by the number of enabled pools — with both on, each pool gets 50. The blast-radius cap. |
 | `nodepool_memory_limit_gi` | `number` | `400` | Same, for memory. A cpu-only limit lets a memory-heavy workload provision far more instance than intended. |
-| `nodepool_capacity_types` | `list(string)` | `["spot","on-demand"]` | Valid values are `spot`, `on-demand`, `reserved`. |
+| `nodepool_capacity_types` | `list(string)` | `["spot","on-demand"]` | Valid values are `spot`, `on-demand`. Karpenter 1.14.0 also recognizes a third value, `reserved` (ODCR/Capacity Blocks; `featureGates.reservedCapacity` is beta and on by default) — see `reference/karpenter-api-reference.md`. Phase 5 §5.3a deliberately does not use capacity reservations, so this variable does not accept it; Phase 0's `validation` block enforces exactly this two-value set. |
 | `nodepool_default_arch` | `string` | `"arm64"` | Which pool wins for a pod with no arch constraint, implemented via NodePool `weight`. `arm64` makes Graviton the default. |
 | `node_ami_alias` | `string` | `"al2023@latest"` | `EC2NodeClass` AMI alias. Pin to a release tag (e.g. `al2023@v20260701`) for production — see `reference/karpenter-api-reference.md` §2. |
 | `enable_arm64_nodepool` | `bool` | `true` | |

@@ -1,0 +1,53 @@
+# Copy this file to terraform.tfvars and fill in your own values:
+#   cp terraform.tfvars.example terraform.tfvars
+# terraform.tfvars is gitignored — it is never committed.
+
+# -----------------------------------------------------------------------------
+# MANDATORY — the two settings this repo will not silently default around.
+# -----------------------------------------------------------------------------
+
+# cluster_endpoint_public_access defaults to true with an empty CIDR allowlist,
+# and a validation block refuses that combination on purpose (S-04): an
+# internet-open Kubernetes API endpoint is the most commonly flagged EKS
+# misconfiguration, and IAM authentication is not a substitute for network
+# scoping. Find your address and set it below — do not leave the placeholder.
+cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"] # <-- your public IP: curl -s https://checkip.amazonaws.com
+
+# Required whenever enable_budget_alarm is true (the default). A budget with no
+# subscriber is silent, which is worse than none because it looks like a control.
+budget_notification_email = "you@example.com"
+
+# -----------------------------------------------------------------------------
+# PRODUCTION SHAPE — these are already the defaults (ADR-11). Spelled out here,
+# commented, only so the shape is visible; leaving them commented out has the
+# identical effect. Figures are us-east-1, idle cluster (no Karpenter nodes
+# running), from docs/00-architecture-and-decisions.md SS5.
+# -----------------------------------------------------------------------------
+
+# single_nat_gateway = false # NAT gateway per AZ, no single point of failure: ~$99/mo (3 AZ)
+# bootstrap_node_min_size = 2 # 2x On-Demand t4g.medium, HA across AZs:        ~$49/mo
+# enable_vpc_flow_logs = true # CloudWatch VPC flow logs:                      ~$5-20/mo
+# cluster_enabled_log_types = ["api", "audit", "authenticator", "controllerManager", "scheduler"]
+#                              # all 5 control-plane log types:                 ~$5-30/mo, workload-dependent
+# cluster_log_retention_days = 90
+# enable_vpc_endpoints = false # interface endpoints off by default (ADR-11) — the single largest
+#                               # line item in the stack if turned on: +$263/mo (12 endpoints x 3
+#                               # AZs). The S3 gateway endpoint is free and always on regardless.
+
+# -----------------------------------------------------------------------------
+# POC / COST-SAVER OVERRIDES — uncomment to trade the production shape above
+# for a cheaper, less available stack. Idle total with ALL of these on:
+# ~$165/mo, vs. ~$245/mo at the production defaults (excl. log ingest).
+# -----------------------------------------------------------------------------
+
+# single_nat_gateway = true          # one NAT for all AZs:      ~$33/mo (was ~$99)  — single point of failure
+# bootstrap_node_min_size = 1        # 1x On-Demand t4g.medium:  ~$25/mo (was ~$49)  — loses HA for the Karpenter controller
+# enable_vpc_flow_logs = false       # no flow logs:             $0/mo   (was ~$5-20)
+# cluster_enabled_log_types = ["audit"] # audit only:            ~$2-10/mo (was ~$5-30)
+# cluster_log_retention_days = 7     # shorter retention
+
+# -----------------------------------------------------------------------------
+# Everything else (project_name, environment, region, kubernetes_version, the
+# Karpenter and NodePool variables, ...) is fine at its default. See
+# variables.tf or docs/contracts/interface-contract.md SS3 for the full list.
+# -----------------------------------------------------------------------------
