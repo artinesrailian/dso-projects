@@ -256,7 +256,8 @@ upstream module's outputs are named `*_subnets` but our contract says `*_subnet_
 
 - **S-10** Nodes and pods have no public IP and live only in private subnets.
 - **S-11** Control-plane ENIs sit in intra subnets with no route to a NAT gateway.
-- **S-12** Default security group and default NACL are managed and have no rules.
+- **S-12** Default security group is managed and has no rules. The default NACL is managed
+  (adopted into state) but deliberately kept allow-all — see §1.6.
 - **S-13** VPC endpoint security group allows 443 from the VPC CIDR only.
 - **S-14** VPC flow logs enabled by default with a defined retention period.
 - **S-15** No security group in this module has an ingress rule with `0.0.0.0/0`.
