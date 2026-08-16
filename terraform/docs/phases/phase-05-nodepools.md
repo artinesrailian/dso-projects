@@ -193,8 +193,8 @@ then never schedules.
 **This is the fix for an ordering bug, so understand why before you write it.**
 
 Phase 2 creates the developer access entries in Terraform: after `terraform apply`, every principal
-in `developer_principal_arns` holds `AmazonEKSEditPolicy` on the namespaces in
-`developer_namespaces`. If the namespace, its Pod Security labels and its ResourceQuota are a
+in `developer_principal_arns` is bound to the `developer_rbac_group` group, scoped to the namespaces
+in `developer_namespaces`. If the namespace, its Pod Security labels and its ResourceQuota are a
 `kubectl apply` a human is supposed to remember, then **Terraform hands out access to a namespace
 whose guardrails may not exist** — and nothing reconciles them afterwards. An operator doing
 `kubectl create namespace demo` by hand produces an unlabelled, unquota'd namespace that developers
@@ -259,6 +259,116 @@ lifecycle {
   }
 }
 ```
+
+### 5.3d The developer ClusterRole — what "zero trust" actually means here
+
+Phase 2 binds developers to the group `var.developer_rbac_group` and associates **no** AWS access
+policy. This chart supplies the permissions. Grant only what deploying and operating an application
+requires; everything omitted is omitted on purpose, and the omissions are the point.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ .Values.developerRbacGroup | replace ":" "-" }}
+rules:
+  # --- The job: ship and run a workload -------------------------------------
+  - apiGroups: ["apps"]
+    resources: [deployments, replicasets, statefulsets,
+                deployments/scale, statefulsets/scale, replicasets/scale]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["batch"]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: [""]
+    resources: [pods, services, configmaps]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Observe your own workload --------------------------------------------
+  - apiGroups: [""]
+    resources: [pods/log, pods/status, events]
+    verbs: [get, list, watch]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: [pods, nodes]
+    verbs: [get, list]            # kubectl top
+
+  # --- Follow the guidance we give them -------------------------------------
+  # The README tells developers to set a PodDisruptionBudget on a Spot cluster
+  # and phase-10 demos an HPA. Both must therefore be grantable.
+  - apiGroups: ["policy"]
+    resources: [poddisruptionbudgets]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["autoscaling"]
+    resources: [horizontalpodautoscalers]
+    verbs: [get, list, watch, create, update, patch, delete]
+
+  # --- Diagnose your own limits without opening a ticket ---------------------
+  - apiGroups: [""]
+    resources: [resourcequotas, limitranges]
+    verbs: [get, list, watch]
+
+  # --- Storage --------------------------------------------------------------
+  - apiGroups: [""]
+    resources: [persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ["storage.k8s.io"]
+    resources: [storageclasses]
+    verbs: [get, list, watch]     # read-only: they pick one, they do not define one
+
+  # --- Debugging: a deliberate, bounded exception ---------------------------
+  # exec is genuinely needed to debug a container and is scoped to this
+  # namespace. Accept it knowingly: it lets a developer read any secret MOUNTED
+  # into any pod here, which is why per-team namespaces matter as soon as this
+  # carries more than one team's work.
+  - apiGroups: [""]
+    resources: [pods/exec, pods/portforward]
+    verbs: [create, get]
+```
+
+**Bound to the group, per governed namespace** — a RoleBinding, so it cannot leak cluster-wide:
+
+```yaml
+{{- range .Values.governedNamespaces }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata: { name: developers, namespace: {{ . }} }
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole                       # cluster-scoped definition...
+  name: {{ $.Values.developerRbacGroup | replace ":" "-" }}
+subjects:
+  - kind: Group                           # ...namespace-scoped binding
+    name: {{ $.Values.developerRbacGroup }}
+    apiGroup: rbac.authorization.k8s.io
+{{- end }}
+```
+
+#### What is deliberately NOT granted, and why
+
+| Not granted | Reason |
+|---|---|
+| `secrets` (any verb) | The whole point. Nobody reads anyone's credentials. AWS access comes from a Pod Identity association an operator creates; app secrets come from the platform team. A pod can still *mount* a secret — the kubelet reads it, not the user. |
+| `serviceaccounts` create / **impersonate** | `impersonate` is a direct escalation to any workload identity in the namespace. Pods use `default` or an operator-created SA. |
+| `daemonsets` | One pod per node, growing with the cluster; contrary to the intent of a per-namespace quota. |
+| `ingresses`, `services/proxy` | Exposure is an operator decision, consistent with `services.loadbalancers: 0` in the quota. |
+| `networkpolicies` | A developer must not be able to edit isolation. |
+| `roles`, `rolebindings` | Self-escalation. Note `AmazonEKSAdminPolicy` *does* grant these — another reason not to reach for the managed policies. |
+| Anything cluster-scoped — `nodes`, `namespaces`, `nodepools`, `ec2nodeclasses`, CRDs, webhooks | A RoleBinding cannot grant them, by construction. |
+
+**Verify the boundary rather than trusting it** — `kubectl auth can-i` evaluates real RBAC (unlike
+with AWS access policies, where it reports nothing):
+
+```bash
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create deployments -n demo   # yes
+kubectl auth can-i --as-group=opsfleet:developers --as=dev get secrets        -n demo   # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create daemonsets  -n demo   # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev create rolebindings -n demo  # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev list pods          -n kube-system  # no
+kubectl auth can-i --as-group=opsfleet:developers --as=dev list nodes                    # no
+```
+
+Phase 8's `verify.sh` must assert all six. A permission boundary with no test is a claim.
 
 ### 5.4 What NOT to put in the pools
 

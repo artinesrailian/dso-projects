@@ -194,10 +194,30 @@ resource "aws_iam_service_linked_role" "spot" {
 }
 ```
 
-Default the variable to **`false`**, because the resource fails on any account that already has the
-role (`InvalidInput: Service role name AWSServiceRoleForEC2Spot has been taken in this account`) and
-that is the common case. Document the toggle in the README. This is a judgement call, not an
-oversight — say so in the code comment.
+Default the variable to **`true`** so a fresh account works with no manual step — this is
+prerequisite P2, and leaving it to a human is how a first deploy fails with an error that looks like
+an IAM problem.
+
+The complication is that the resource **fails if the role already exists**
+(`InvalidInput: Service role name AWSServiceRoleForEC2Spot has been taken in this account`), which
+is the common case on any account that has ever launched a Spot instance. Handle it in code rather
+than with a toggle a human has to reason about:
+
+```hcl
+# Adopt the role if it already exists; create it if it does not. `import` blocks
+# are declarative and no-op when the role is absent, so this is idempotent across
+# both fresh and established accounts.
+import {
+  to = aws_iam_service_linked_role.spot[0]
+  id = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/spot.amazonaws.com/AWSServiceRoleForEC2Spot"
+}
+```
+
+**Verify this actually behaves as described before relying on it** — `import` block semantics for a
+resource that may not exist are the sort of thing that changes between Terraform versions. If it
+does not work cleanly on both a fresh and an established account, fall back to the toggle defaulted
+`false` **plus** an explicit `verify.sh` assertion that the role exists, so the gap is detected
+rather than merely documented. Record which path you took in your completion report.
 
 ---
 

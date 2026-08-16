@@ -135,6 +135,51 @@ ARCH=$(kubectl get pods -n demo -l app=web-graviton -o jsonpath='{.items[0].spec
 # and the same for amd64 with deployment-x86.yaml
 ```
 
+**D2. The developer permission boundary actually holds**
+
+`kubectl auth can-i` evaluates real RBAC, so unlike AWS access policies this boundary is testable.
+Assert both directions — a boundary tested only for what it denies can be denying everything.
+
+```bash
+G="--as-group=$(terraform output -raw developer_rbac_group) --as=ci-probe"
+NS=demo
+# MUST be allowed
+for r in "create deployments" "delete pods" "create horizontalpodautoscalers" "get resourcequotas"; do
+  kubectl auth can-i $G $r -n $NS | grep -qx yes || fail "developer cannot $r"
+done
+# MUST be denied
+for r in "get secrets" "create serviceaccounts" "create daemonsets" "create rolebindings" "create ingresses"; do
+  kubectl auth can-i $G $r -n $NS | grep -qx no  || fail "developer CAN $r"
+done
+# MUST be denied outside their namespace and cluster-wide
+kubectl auth can-i $G list pods -n kube-system | grep -qx no || fail "developer can read kube-system"
+kubectl auth can-i $G list nodes              | grep -qx no || fail "developer can list nodes"
+kubectl auth can-i $G get nodepools.karpenter.sh | grep -qx no || fail "developer can read NodePools"
+```
+
+**D3. The guardrails exist and are Terraform-owned**
+
+```bash
+kubectl get ns "$NS" -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}' \
+  | grep -qx restricted || fail "namespace not PSA-restricted"
+kubectl get resourcequota -n "$NS" -o name | grep -q . || fail "no ResourceQuota"
+kubectl get limitrange    -n "$NS" -o name | grep -q . || fail "no LimitRange"
+# The quota must block self-service public exposure
+kubectl get resourcequota -n "$NS" -o jsonpath='{.items[0].spec.hard.services\.loadbalancers}' \
+  | grep -qx 0 || fail "loadbalancer quota is not 0"
+```
+
+**D4. The quota REQUEST is not the quota** — phase-00 opens increase requests, but approval is
+asynchronous. Assert the effective value, not that Terraform applied:
+
+```bash
+for q in L-1216C47A L-34B43A08; do
+  V=$(aws service-quotas get-service-quota --service-code ec2 --quota-code $q --query 'Quota.Value' --output text)
+  awk -v v="$V" 'BEGIN{exit !(v+0 >= 104)}' \
+    && pass "quota $q = $V" || fail "quota $q is $V — increase not yet approved"
+done
+```
+
 **E. Spot is actually being used**
 ```bash
 kubectl get nodes -L karpenter.sh/capacity-type
