@@ -301,9 +301,19 @@ variable "taint_bootstrap_nodes" {
 }
 
 variable "create_spot_service_linked_role" {
-  description = "Creates/adopts AWSServiceRoleForEC2Spot so a fresh account needs no manual step. See phase-03 for the idempotency handling."
+  description = <<-EOT
+    Creates AWSServiceRoleForEC2Spot (prerequisite P2). Defaults to false:
+    aws_iam_service_linked_role fails outright if the role already exists,
+    which is the common case on any account that has ever launched a Spot
+    instance. A root-level `import` block was evaluated as an idempotent
+    adopt-or-create alternative and rejected — it hard-fails terraform apply
+    on a fresh account instead, the one case this variable exists to cover.
+    See modules/karpenter/README.md for the full reasoning. Set true only
+    after confirming the role does not already exist
+    (`aws iam get-role --role-name AWSServiceRoleForEC2Spot`).
+  EOT
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "request_service_quotas" {

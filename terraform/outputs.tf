@@ -1,4 +1,4 @@
-# Root outputs. Phases 3-4 add Karpenter outputs.
+# Root outputs. Phase 4 adds the remaining Karpenter output (helm_release_name).
 # See interface-contract.md SS4 for the full, final list this file must converge on.
 
 output "vpc_id" {
@@ -55,4 +55,24 @@ output "oidc_provider_arn" {
 output "configure_kubectl" {
   description = "Run this to point kubectl at the new cluster."
   value       = "aws eks update-kubeconfig --region ${var.region} --name ${module.eks.cluster_name}"
+}
+
+output "karpenter_controller_iam_role_arn" {
+  description = "Role assumed by the Karpenter controller."
+  value       = module.karpenter.controller_iam_role_arn
+}
+
+output "karpenter_node_iam_role_name" {
+  description = "Role assumed by Karpenter-launched nodes."
+  value       = module.karpenter.node_iam_role_name
+}
+
+output "karpenter_node_iam_role_arn" {
+  description = "ARN of the role assumed by Karpenter-launched nodes. Consumed by verification tooling that resolves the node access entry by principal ARN."
+  value       = module.karpenter.node_iam_role_arn
+}
+
+output "karpenter_interruption_queue_name" {
+  description = "SQS queue for Spot interruption / rebalance events."
+  value       = module.karpenter.interruption_queue_name
 }
