@@ -154,17 +154,21 @@ the interface contract rather than the implemented file. Everything else is stri
 report recording what was actually built, every deviation from the spec, and what it could not
 verify — those reports are the detailed record; this is the summary.
 
-| Built | |
-|---|---|
-| **0 Scaffold & state** | Root module, 46 variables with validation, `Makefile`, and a separate `bootstrap/` root module for the encrypted S3 + KMS state backend. |
-| **1 Networking** | `modules/network` — 3-AZ VPC with private/public/intra subnets, NAT, flow logs, discovery tagging, and 12 optional interface endpoints (off by default, ~$263/mo). |
-| **2 EKS control plane** | `modules/eks` — cluster on access-entry auth, CMK envelope encryption with a disable/delete detector, five control-plane log types, five add-ons, and a Graviton bootstrap node group. |
-| **3 Karpenter (AWS side)** | `modules/karpenter` — controller and node IAM via Pod Identity, SQS interruption queue, EventBridge rules, `EC2_LINUX` node access entry. |
-| **4 Karpenter (Helm)** | Two pinned releases — `karpenter-crd` then `karpenter` — with the CoreDNS-deadlock and CRD-upgrade fixes applied. |
-| **5 NodePools** | `modules/cluster-resources` — `amd64` + `arm64` NodePools on Spot + On-Demand, the `default` EC2NodeClass, a `gp3` StorageClass, and the governed-namespace guardrails (PSA, ResourceQuota, LimitRange, developer ClusterRole). |
-| **6 Demo workloads** | `examples/` — Graviton, x86 and two multi-arch patterns, plus an arch-check Job. |
-| **7 README** | The graded artifact, `README.md`, with separate developer and platform-engineer sections. |
-| **8 Verification & teardown** | `scripts/verify.sh`, `scripts/teardown.sh`, and [`AUDIT.md`](AUDIT.md) — the hardening sign-off. |
+Every phase below is **implemented and statically verified; none is verified against real AWS.**
+The right-hand column is what "statically verified" actually means for that phase — it differs a
+lot, and "not applied" does not mean "not checked."
+
+| # | Produces | Static evidence (no AWS account) |
+|---|---|---|
+| **0** Scaffold & state | Root module, 46 validated variables, `Makefile`, and a separate `bootstrap/` root module for the encrypted S3 + KMS state backend. | `terraform test` — the S-04 endpoint guard **actually fires**: two rejecting runs, one accepting. `fmt`/`validate` clean; 46/46 variable-description parity. |
+| **1** Networking | `modules/network` — 3-AZ VPC, private/public/intra subnets, NAT, flow logs, discovery tagging, 12 optional interface endpoints (off by default, ~$263/mo). | Two more mocked-provider plan tests covering **both** `enable_vpc_endpoints` branches. Three negative greps clean (no hardcoded CIDRs, no open ingress, no stray discovery tag). |
+| **2** EKS control plane | `modules/eks` — access-entry auth, CMK envelope encryption with a disable/delete detector, five control-plane log types, five add-ons, Graviton bootstrap node group. | 8 positive assertions + 2 negative greps. Every module input checked against the **v21.24.2 source itself**, not recalled from memory. |
+| **3** Karpenter (AWS side) | `modules/karpenter` — controller and node IAM via Pod Identity, SQS interruption queue, EventBridge rules, `EC2_LINUX` node access entry. | 4 positive + 2 negative greps; S-30–S-34 traced to specific upstream policy lines. The `import`-block approach was tested against Terraform's own source and **rejected** — it hard-fails on a fresh account. |
+| **4** Karpenter (Helm) | Two pinned releases — `karpenter-crd` then `karpenter` — with the CoreDNS-deadlock and CRD-upgrade fixes applied. | 8 acceptance greps, three of them leakage checks: no IRSA annotation, no provider-v2 `set` blocks, no static-token auth data source. |
+| **5** NodePools | `modules/cluster-resources` — `amd64` + `arm64` NodePools on Spot + On-Demand, the `default` EC2NodeClass, a `gp3` StorageClass, and the governed-namespace guardrails. | `helm lint` + assertions on rendered output (7 positive, 2 negative). `terraform graph` confirms the CRD-ordering edge that G-19 exists to prevent. |
+| **6** Demo workloads | `examples/` — Graviton, x86 and two multi-arch patterns, plus an arch-check Job. | `kubeconform -strict`: 9/9 resources valid. The nginx image was **actually run** read-only, non-root, `--cap-drop=ALL` and served HTTP 200; both images confirmed multi-arch by manifest. |
+| **7** README | The graded artifact, `README.md`, with separate developer and platform-engineer sections. | Link and leaked-identifier checks clean; the embedded YAML diffed **byte-identical** to the shipped manifest; cold-read walkthrough by a zero-context agent. |
+| **8** Verification & teardown | `scripts/verify.sh`, `scripts/teardown.sh`, and [`AUDIT.md`](AUDIT.md) — the hardening sign-off. | `bash -n` and `shellcheck` clean; the destroy-ordering assertion passes; 61/61 checklist items have an audit row and **none** claims verification that did not happen. |
 
 | Not built | Why |
 |---|---|
@@ -172,7 +176,36 @@ verify — those reports are the detailed record; this is the summary.
 | **10 metrics-server & HPA** | Optional; not requested. No `kubectl top` and no HPA. Karpenter node autoscaling is unaffected — it works from pending-pod requests, not metrics. |
 | **11 CI/CD & policy scanning** | Optional; not requested. `make check` runs the same static gates locally, but nothing enforces them on a change. Tracked as ❌ in [`AUDIT.md`](AUDIT.md) (S-93, S-94). |
 
+### Where this stands
+
 > **The stack has never been applied to an AWS account.** No credentials were available in any
 > phase. Everything above is `fmt`/`validate`/`test`-clean and cross-checked against pinned upstream
-> module source, but no `terraform apply` has run. [`AUDIT.md`](AUDIT.md) states this per requirement
-> and marks every row accordingly.
+> module source, but no `terraform apply` has run — so of [`AUDIT.md`](AUDIT.md)'s 61 rows, **0 are
+> ✅ Verified**, 54 are 📝 Implemented-not-verified, 2 are ⚠️ Deviations (S-12, S-27, both with a
+> recorded decision) and 5 are ❌ Not done (S-90–S-94, the optional phases).
+
+**What closes that gap is one apply → verify → teardown cycle**, and nothing else can. The
+prerequisites have very different lead times, so start them in this order:
+
+1. **Days ahead — the EC2 vCPU quota.** A fresh account has 5 vCPU on each of `L-1216C47A` and
+   `L-34B43A08`; the bootstrap node group alone consumes 4. `request_service_quotas` defaults `true`
+   so `apply` opens both requests, but approval is asynchronous — applying and *then* waiting means
+   a cluster billing NAT while Karpenter can launch nothing (gotchas G-02).
+2. **Before apply — four `terraform.tfvars` values**, two of which fail silently rather than loudly:
+   `cluster_endpoint_public_access_cidrs` (mandatory, validation rejects empty and `0.0.0.0/0`),
+   `budget_notification_email` (mandatory while `enable_budget_alarm` is on), `alert_email`
+   (**defaults empty** — with no subscription the S-29 CMK alarm has nothing to notify), and
+   `create_spot_service_linked_role = true` on an account that has never run Spot (G-07).
+3. **`make bootstrap` → `backend.hcl` → `make init` → `make apply` → `./scripts/verify.sh`.**
+   Expect `verify.sh` to need a debugging pass on its first-ever run — see phase 8's completion
+   report, "Outstanding risks", for the three assumptions most likely to produce a spurious FAIL.
+4. **Update [`AUDIT.md`](AUDIT.md)** — move the rows you actually proved from 📝 to ✅ with the
+   pasted output, and delete the never-applied sentence at the top. Appendix B of that document
+   lists exactly which sections cover which requirements.
+5. **`make destroy` the same day.** Idle cost is ~$245/month and the budget alarm is a lagging
+   indicator.
+
+Of the three unbuilt phases, **11 (CI/CD) is the one worth doing next**: S-93 and S-94 are the only
+❌ rows that are not simply "optional feature not requested", and it is the only route by which
+`tflint`, `checkov` and `trivy` ever run against this code — none of them is installed in the
+environment it was built in.
