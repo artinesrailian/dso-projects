@@ -161,6 +161,11 @@ carrying `karpenter.sh/nodepool`, so it will not launch capacity to run itself.
 The failure looks like: one Karpenter pod `Running`, one `Pending` forever, cluster otherwise
 healthy, and no autoscaling ever happens. Phase 2's `min_size = 2` is what prevents it.
 
+> Correction (REVIEW.md F-09): "no autoscaling ever happens" overstates it. Karpenter uses leader
+> election — the one Running replica autoscales normally; what's actually lost is HA, and the
+> chart's own PodDisruptionBudget (`maxUnavailable: 1`) then blocks rotating that one node.
+> Verified against the pinned chart's `values.yaml`.
+
 ### 4.5 Optional: pin the controller to the bootstrap nodes
 
 The upstream example labels its controller node group `karpenter.sh/controller = "true"` and sets a

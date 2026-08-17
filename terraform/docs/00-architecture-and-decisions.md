@@ -328,7 +328,7 @@ the graded artefact — check the arithmetic, not just the numbers.
 |---|---|---|---|---|
 | EKS control plane | $0.10/hr | **~$73** | not optional | ~$73 |
 | NAT gateways | $0.045/hr + $0.045/GB | **~$99** (3 AZ) | `single_nat_gateway = true` | ~$33 |
-| Bootstrap node group | 2 × `t4g.medium` @ $0.0336/hr | **~$49** | none — 2 nodes required by Karpenter podAntiAffinity (G-05) | ~$49 |
+| Bootstrap node group | 2 × `t4g.medium` @ $0.0336/hr | **~$49** | `min_size`/`desired_size = 1` (loses HA, chart PDB blocks rotation — G-05) | ~$25 |
 | Bootstrap EBS | 2 × 50 GiB gp3 @ $0.08/GiB | **~$8** | 20 GiB volumes | ~$3 |
 | VPC flow logs | ingest + storage | **~$5–20** | `enable_vpc_flow_logs = false` | $0 |
 | Control-plane logs | CloudWatch ingest | **~$5–30**, workload-dependent | `cluster_enabled_log_types = ["audit"]`, retention 7d | ~$2–10 |
