@@ -45,34 +45,60 @@ for t in terraform aws kubectl; do
   command -v "$t" >/dev/null 2>&1 || abort "required tool not on PATH: $t"
 done
 
-# On an uninitialised or empty state `terraform output` errors opaquely at
-# line 1 — but a transient S3 backend read hiccup prints a similarly opaque
-# error too, and discarding stderr made the two indistinguishable (observed
-# live: this aborted with "no readable Terraform state" moments before a
-# plain `terraform state list` succeeded with every resource intact). One
-# retry before giving up, and the real error surfaces instead of being
-# thrown away.
-tf_output() {
+# A destroy that fails partway through cannot be resumed via `terraform
+# output`: Terraform nulls every root output the instant a destroy operation
+# begins APPLYING, independent of how far it actually gets — observed live,
+# `terraform output` returned nothing for everything after a destroy failed
+# 46/110 resource actions in, with the cluster and most resources still fully
+# intact. `terraform apply -refresh-only` recovers the outputs, but is not a
+# safe universal fix here: module.karpenter's vendored data sources
+# unconditionally index aws_sqs_queue.this[0]/aws_iam_role.node[0] (see the
+# -refresh-only warning in docs/operator-runbook.md §3) — if a DIFFERENT
+# partial-failure ordering had already destroyed those two specific
+# resources, -refresh-only would hit the same "Invalid index: empty tuple"
+# error instead of fixing anything.
+#
+# cluster_name and region need none of that: they are pure configuration
+# (local.name = "${var.project_name}-${var.environment}", and var.region —
+# see outputs.tf/locals.tf), with zero dependency on any resource being
+# intact. `terraform console` evaluates them straight from config, making no
+# AWS calls and no refresh, so it works identically whether state is empty,
+# fully applied, or stuck mid-destroy. Confirmed against real state: `local
+# .name` returned the cluster's actual recorded `name` attribute even while
+# `terraform output` returned nothing for it.
+tf_console() {
   local out
-  out="$(terraform output -raw "$1" 2>&1)" && { printf '%s' "$out"; return 0; }
+  out="$(printf '%s\n' "$1" | terraform console 2>&1)" \
+    && { printf '%s' "$out" | sed -e 's/^"//' -e 's/"$//'; return 0; }
   sleep 3
-  out="$(terraform output -raw "$1" 2>&1)" && { printf '%s' "$out"; return 0; }
+  out="$(printf '%s\n' "$1" | terraform console 2>&1)" \
+    && { printf '%s' "$out" | sed -e 's/^"//' -e 's/"$//'; return 0; }
   printf '%s' "$out"
   return 1
 }
 
+# `terraform console` only needs the config, not a populated state, so it
+# can't tell "nothing was ever applied" from "everything already destroyed"
+# on its own the way the old terraform-output check incidentally did.
+# Restore that signal from `terraform state list`, which is unaffected by
+# destroy's output-nulling since it lists state directly.
+if [ -z "$(terraform state list 2>/dev/null || true)" ]; then
+  abort "no resources in Terraform state — nothing to tear down.
+       Either nothing was ever applied, or a previous teardown already completed."
+fi
+
 TF_CLUSTER_ERR=""
-if CLUSTER="$(tf_output cluster_name)"; then :; else TF_CLUSTER_ERR="$CLUSTER"; CLUSTER=""; fi
+if CLUSTER="$(tf_console local.name)"; then :; else TF_CLUSTER_ERR="$CLUSTER"; CLUSTER=""; fi
 TF_REGION_ERR=""
-if REGION="$(tf_output region)"; then :; else TF_REGION_ERR="$REGION"; REGION=""; fi
+if REGION="$(tf_console var.region)"; then :; else TF_REGION_ERR="$REGION"; REGION=""; fi
 ENDPOINT="$(terraform output -raw cluster_endpoint 2>/dev/null || true)"
 VPC_ID="$(terraform output -raw vpc_id 2>/dev/null || true)"
 
 if [ -z "$CLUSTER" ] || [ -z "$REGION" ]; then
-  abort "could not read Terraform outputs 'cluster_name'/'region' after retrying once.
+  abort "could not evaluate local.name/var.region via 'terraform console' after retrying once.
        Real error: ${TF_CLUSTER_ERR:-$TF_REGION_ERR}
-       Either nothing was ever applied (there is nothing to tear down), or the
-       backend is not initialised — run 'terraform init -backend-config=backend.hcl' first."
+       The working directory may not be initialised — run
+       'terraform init -backend-config=backend.hcl' first — or terraform.tfvars is missing/broken."
 fi
 ok "cluster=$CLUSTER region=$REGION vpc=${VPC_ID:-<unknown>}"
 
