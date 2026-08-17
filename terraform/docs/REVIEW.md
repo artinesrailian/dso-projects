@@ -595,7 +595,124 @@ way that belongs to another package.)*
 
 ### WP-1
 
-*(pending)*
+**Status: DONE.** All 13 findings covered by WP-1 addressed — 12 as their stated fix, one (F-26's
+second negative test) partially: the validation change and the first negative test both landed; the
+second negative test was attempted exactly as specified and dropped per the prompt's own
+contingency, with the reason recorded in the test file. Acceptance criteria all pass, pasted below.
+
+**Files changed:** `budget.tf`, `variables.tf`, `modules/eks/main.tf`, `modules/eks/iam.tf`,
+`modules/karpenter/helm.tf`, `modules/network/variables.tf`, `modules/network/README.md`,
+`modules/cluster-resources/chart/templates/namespaces.yaml`, `bootstrap/versions.tf`,
+`bootstrap/README.md`, `.gitignore`, `tests/cidr_guard.tftest.hcl`,
+`tests/network_endpoints.tftest.hcl`, `tests/governed_namespaces.tftest.hcl` (**new**),
+`docs/contracts/interface-contract.md`, `docs/AUDIT.md` (only the S-02, S-29, S-C1, S-C2, S-64
+cells), `docs/phases/phase-00-scaffold-and-state.md`, `docs/phases/phase-01-networking.md`,
+`docs/phases/phase-02-eks-cluster.md`, `docs/phases/phase-05-nodepools.md`. `modules/karpenter/
+variables.tf` and root `main.tf` were **not** touched — see F-25 below.
+
+**Per-finding status:**
+
+| # | Status | Notes |
+|---|---|---|
+| F-01 | Done | `activate_cost_allocation_tags` (default `false`), `count`-gates both `aws_ce_cost_allocation_tag` resources. `aws_budgets_budget.account_backstop` untouched — it has no `cost_filter` and remains the day-zero guard regardless of this toggle. |
+| F-02 | Done | `request_service_quotas` default flipped `true` → `false`, description extended with the exact failure modes. `quotas.tf` unchanged — already correctly `count`-gated on the variable. |
+| F-04 | Done | Added `data.aws_caller_identity.current`, `data.aws_iam_policy_document.alerts_key` (account-root `kms:*` + unconditioned `events.amazonaws.com` `GenerateDataKey*`/`Decrypt`, no SourceArn — per the finding's explicit instruction that such a condition is unsupported for this path), `aws_kms_key.alerts` (rotation on, 30-day window), `aws_kms_alias.alerts`. `aws_sns_topic.alerts.kms_master_key_id` now points at it. |
+| F-06 | Done | `data "aws_iam_policy" "ebs_csi" { name = "AmazonEBSCSIDriverPolicyV2" }` resolves the ARN by name; `aws_iam_role_policy_attachment.ebs_csi` reads `data.aws_iam_policy.ebs_csi.arn`. Added `mock_data "aws_iam_policy"` to all three `mock_provider "aws"` blocks (the two pre-existing test files plus the new one) — `terraform test` needed it the moment `module.eks` entered any plan. |
+| F-07 | Done | `*.plan` added to `.gitignore`; `git check-ignore -q tf.plan` → IGNORED. AUDIT S-02 evidence updated. |
+| F-12 | Done | Module's own `vpc_cidr` validation tightened `/20` → `/18`, matching the root's invariant exactly. Corrected the phase-01 deviation #3 text, which had claimed the `/20` bound was safe reasoning ("cidrsubnet cannot fail") that does not actually hold at `/20` — recorded the correction rather than silently rewriting the original claim. |
+| F-13 (variables.tf part) | Done | Appended the "run Terraform from inside the VPC" caveat to the S-04 validation's own `error_message`, so it surfaces at the point of failure rather than only in a doc a reader may not open. The README row is WP-3's. |
+| F-20 | Done | `depends_on = [helm_release.karpenter_crd, module.karpenter]`. Verified as a REAL edge, not just a string that parses: rendered `terraform graph` from a throwaway local-backend override (deleted after, no state committed) and confirmed `module.karpenter.helm_release.karpenter` now depends directly on `aws_eks_pod_identity_association.karpenter`, `aws_eks_access_entry.node`, and every IAM resource in the submodule — output pasted below. |
+| F-21 (variables.tf part) | Done | Added the "do not include the deploying identity; do not list the same principal in both lists" sentence to both `cluster_admin_principal_arns` and `developer_principal_arns` descriptions. The `interface-contract.md`/gotchas G-01 mirrors are WP-3's. |
+| F-22 | Done | `enforce-version: v1.36` → `latest` in the chart template; mirrored in `phase-05-nodepools.md`'s embedded YAML and in AUDIT S-64's evidence. **`security-checklist.md:102` was NOT touched** — it is not in WP-1's "Files allowed" list, and no WP explicitly covers it either (a gap in the review's own package boundaries, flagged below for whoever runs WP-3 or a follow-up). |
+| F-25 (variables.tf part) | Done, optional half declined | Reworded both descriptions to "Reserved for optional Phase N — not implemented; setting true has no effect." **Did not** drop `node_security_group_id` from `modules/karpenter` — that half was explicitly optional, and doing it correctly touches root `main.tf:66` and `interface-contract.md` §5.3, neither of which is in WP-1's allowed-files list for this finding; the minimal, in-scope fix (the description reword) fully addresses the "promises to install something it doesn't" problem the finding actually raises. |
+| F-26 | Done, second test dropped as instructed | Added the `cidrnetmask` validation as a **second** `validation` block (Terraform ≥1.9 allows multiple blocks per variable; `required_version >= 1.11.0` already exceeds that). `run "rejects_bare_ip_without_mask"` and `run "rejects_missing_budget_email"` both pass. `run "rejects_ungoverned_developer_namespace"` — the module-nested precondition test — was rejected by `terraform test` itself: `Error: Invalid 'expect_failures' reference … You cannot expect failures from module.cluster_resources.helm_release.` Per the prompt's own contingency, dropped that run and recorded why in `tests/governed_namespaces.tftest.hcl`'s header comment, including a from-scratch confirmation (a throwaway, uncommitted `command = plan` run with no `expect_failures`) that the precondition itself still fires — full error text quoted there. What ships is one positive regression test (`accepts_paired_default_namespaces`) isolating a plan through `module.cluster_resources`. |
+| F-27 | Done | `bootstrap/versions.tf`'s `provider "aws"` block now sets `default_tags` (`Project`, `Environment`, `ManagedBy`, `Component = tfstate-backend`), reusing the existing `var.project_name`/`var.environment`. One-line note in `bootstrap/README.md`; AUDIT S-C1 evidence updated. |
+
+**Deviations from the WP-1 prompt:**
+
+1. **F-22's `security-checklist.md:102` sync has no owner across any work package.** The finding's
+   own "Docs to sync" names `security-checklist.md:102`, `AUDIT.md:113` and `phase-05:217`. WP-1's
+   file list omits `security-checklist.md` entirely, and WP-3's coverage line for F-22 doesn't exist
+   at all — F-22 is not mentioned in WP-3's "Covers" list. So the checklist's own literal `v1.36`
+   text is now stale relative to the shipped code, and no planned work package closes it. Flagging
+   explicitly rather than leaving it to be rediscovered as a surprise.
+2. **The same gap exists for F-01 and F-02's `docs/operator-runbook.md`/`README.md` doc syncs.**
+   Both findings list `docs/operator-runbook.md` and (F-01 only) `README.md §Configuration` under
+   "Docs to sync", but neither file is in WP-1's allowed list (both belong to WP-3), and WP-3's own
+   "Covers" line does not name F-01 or F-02 either — only F-05/F-08/F-09/F-10/F-11/F-13/F-14/F-17/
+   F-18/F-19/F-21/F-25. `operator-runbook.md` and `README.md` therefore still describe
+   `request_service_quotas`/cost-allocation-tag behavior that no longer matches the code (the async
+   -approval caveat is still true; the two new failure modes and the two new defaults are not
+   mentioned). Since the user's plan for this session is WP-1 + WP-2 only, this is left for a
+   follow-up rather than expanding WP-1's scope unilaterally.
+3. **`node_security_group_id` was not dropped from `modules/karpenter`** — see F-25 above. A
+   deliberate, minimal-scope decision, not an oversight.
+
+**Acceptance criteria (all from `terraform/`):**
+
+```console
+$ terraform fmt -check -recursive
+(clean, exit 0)
+
+$ terraform init -backend=false && terraform validate
+Success! The configuration is valid.
+
+$ terraform -chdir=bootstrap init -backend=false && terraform -chdir=bootstrap validate
+Success! The configuration is valid.
+
+$ terraform test
+8 passed, 0 failed
+(5 pre-existing + rejects_bare_ip_without_mask + rejects_missing_budget_email +
+ accepts_paired_default_namespaces)
+
+$ helm lint modules/cluster-resources/chart
+1 chart(s) linted, 0 chart(s) failed
+
+$ git check-ignore -q tf.plan && echo IGNORED
+IGNORED
+
+$ grep -n 'kms_master_key_id' modules/eks/main.tf
+272:  kms_master_key_id = aws_kms_key.alerts.arn
+
+$ grep -n 'depends_on' modules/karpenter/helm.tf
+47:  depends_on = [helm_release.karpenter_crd, module.karpenter]
+
+$ grep -n 'enforce-version' modules/cluster-resources/chart/templates/namespaces.yaml
+23:    pod-security.kubernetes.io/enforce-version: latest
+
+$ grep -n 'activate_cost_allocation_tags\|request_service_quotas' variables.tf budget.tf
+variables.tf:327:variable "request_service_quotas" {
+variables.tf:344:variable "activate_cost_allocation_tags" {
+budget.tf:89:  count   = var.activate_cost_allocation_tags ? 1 : 0
+budget.tf:95:  count   = var.activate_cost_allocation_tags ? 1 : 0
+```
+
+**F-20's dependency edge, confirmed real (not just a string that parses)** — via a throwaway
+`terraform graph`, using a local-backend `override.tf` created and deleted for this one check only;
+no state was ever written to S3 and `override.tf` was never committed:
+
+```console
+$ terraform graph | grep 'module.karpenter.helm_release.karpenter" ->'
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_cloudwatch_event_target.this";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_eks_access_entry.node";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_eks_pod_identity_association.karpenter";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_instance_profile.this";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_role_policy.controller";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_role_policy_attachment.controller";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_role_policy_attachment.controller_additional";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_role_policy_attachment.node";
+"module.karpenter.helm_release.karpenter" -> "module.karpenter.module.karpenter.aws_iam_role_policy_attachment.node_additional";
+```
+
+`aws_eks_pod_identity_association.karpenter` — the exact resource F-20 says the Helm release could
+previously start ahead of — is now a direct dependency.
+
+`make check` re-run after every edit: fmt + validate (root and `bootstrap/`) + test all green;
+`lint` cleanly skips (`tflint`/`checkov` not installed in this environment, consistent with every
+prior phase). No AWS credentials used or required — everything above is static.
+
+**Anything found on the way that belongs to another package:** none beyond deviations 1–2 above,
+which are gaps in the review's own package boundaries rather than defects in WP-2/WP-3's scope.
 
 ### WP-2
 

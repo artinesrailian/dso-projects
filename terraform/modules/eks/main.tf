@@ -212,9 +212,57 @@ module "eks" {
 # the account; that is not verified here (no AWS credentials in this
 # environment) — see the completion report.
 
+data "aws_caller_identity" "current" {}
+
+# Dedicated CMK for the alerts topic, not alias/aws/sns — that key's policy
+# can't be edited to grant events.amazonaws.com access, so EventBridge
+# publishes to it fail at KMS and the alarm never delivers. (REVIEW.md F-04.)
+data "aws_iam_policy_document" "alerts_key" {
+  statement {
+    sid       = "EnableIAMUserPermissions"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid       = "AllowEventBridgeToUseTheKey"
+    effect    = "Allow"
+    actions   = ["kms:GenerateDataKey*", "kms:Decrypt"]
+    resources = ["*"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+
+    # No aws:SourceArn condition: AWS docs say it's unsupported for
+    # EventBridge -> SNS delivery to an encrypted topic; adding one would
+    # silently break every publish, same as alias/aws/sns did.
+  }
+}
+
+resource "aws_kms_key" "alerts" {
+  description             = "CMK for the ${var.name} CMK-danger alert SNS topic"
+  enable_key_rotation     = true
+  deletion_window_in_days = 30
+  policy                  = data.aws_iam_policy_document.alerts_key.json
+  tags                    = var.tags
+}
+
+resource "aws_kms_alias" "alerts" {
+  name          = "alias/${var.name}-alerts"
+  target_key_id = aws_kms_key.alerts.key_id
+}
+
 resource "aws_sns_topic" "alerts" {
   name              = "${var.name}-alerts"
-  kms_master_key_id = "alias/aws/sns"
+  kms_master_key_id = aws_kms_key.alerts.arn
   tags              = var.tags
 }
 

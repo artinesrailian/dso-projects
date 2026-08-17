@@ -71,17 +71,18 @@ resource "aws_budgets_budget" "account_backstop" {
   }
 }
 
-# Activated in Terraform rather than documented as a manual Billing-console step.
-# Two caveats stay true even automated: activation can take up to 24h to take
-# effect (the budget filter above matches nothing until then), and
-# Karpenter-launched instances only carry these tags because Phase 5 renders them
-# into EC2NodeClass.spec.tags — the provider's default_tags never reaches them.
+# Gated behind an opt-in toggle, default OFF (REVIEW.md F-01): unconditional,
+# this fails the first apply (the tag has no billing data yet, up to 24h) and
+# fails permanently in an AWS Organizations member account. Activate once the
+# tags have appeared in billing, or from the payer account / Billing console.
 resource "aws_ce_cost_allocation_tag" "project" {
+  count   = var.activate_cost_allocation_tags ? 1 : 0
   tag_key = "Project"
   status  = "Active"
 }
 
 resource "aws_ce_cost_allocation_tag" "environment" {
+  count   = var.activate_cost_allocation_tags ? 1 : 0
   tag_key = "Environment"
   status  = "Active"
 }

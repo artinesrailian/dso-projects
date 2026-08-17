@@ -59,6 +59,14 @@ mock_provider "aws" {
       issuer_arn = "arn:aws:iam::123456789012:role/mock-terraform-test"
     }
   }
+
+  # F-06: EBS CSI policy is now resolved by name via data "aws_iam_policy",
+  # which needs a mock or the data source fails schema validation.
+  mock_data "aws_iam_policy" {
+    defaults = {
+      arn = "arn:aws:iam::aws:policy/AmazonEBSCSIDriverPolicyV2"
+    }
+  }
 }
 
 # The guard must REJECT an internet-open endpoint.
@@ -93,4 +101,28 @@ run "accepts_scoped_allowlist" {
     cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"] # RFC 5737 doc range
     budget_notification_email            = "you@example.com"
   }
+}
+
+# A bare IP with no mask must be REJECTED before it reaches the EKS API.
+run "rejects_bare_ip_without_mask" {
+  command = plan
+  variables {
+    cluster_endpoint_public_access       = true
+    cluster_endpoint_public_access_cidrs = ["203.0.113.10"] # no /32 — the F-26 trap
+    budget_notification_email            = "you@example.com"
+  }
+  expect_failures = [var.cluster_endpoint_public_access_cidrs]
+}
+
+# S-C2's cost control is sold as "budget_notification_email is mandatory when
+# enable_budget_alarm is on" — assert the guard actually fires, not just that
+# the validation block exists.
+run "rejects_missing_budget_email" {
+  command = plan
+  variables {
+    cluster_endpoint_public_access_cidrs = ["203.0.113.10/32"]
+    enable_budget_alarm                  = true
+    budget_notification_email            = ""
+  }
+  expect_failures = [var.budget_notification_email]
 }

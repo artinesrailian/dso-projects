@@ -25,3 +25,7 @@ terraform init -backend-config=backend.hcl
 
 After this, `bootstrap/` is not touched again unless the account's state
 backend itself needs to change (new region, new KMS key, etc).
+
+The provider carries `default_tags` (`Project`, `Environment`, `ManagedBy`, `Component =
+tfstate-backend`) so the bucket and KMS key — the longest-lived resources in the account — are
+attributable in Cost Explorer and covered by the same tag-filtered budget as the main stack (S-C1).

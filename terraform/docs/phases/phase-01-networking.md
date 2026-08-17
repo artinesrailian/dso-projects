@@ -421,16 +421,22 @@ and stop. Do not start Phase 2.
      [var.vpc_cidr] }` block; removed because it was an unrequested behavior
      change on a resource the spec fully specifies, and the failure mode
      (endpoints intermittently unreachable) is worse than the value it added.
-  3. **`vpc_cidr` validated at `/20` inside the module, not `/18`.**
-     Phase-01 §1.2 asks for "a precondition (or validation in Phase 0) proving
-     the VPC is at least a /20." Phase 0 already added a root-level
-     `validation` block requiring `/18` or larger (stricter than /20) on the
-     root `var.vpc_cidr` — satisfying the "or validation in Phase 0" option.
-     Added a `/20` `validation` block on the module's own `vpc_cidr` input as
-     well (§1.2's other listed option), so the module stays self-defending if
-     ever called with a CIDR that bypasses the root's `/18` check. At `<=20`
-     this can never fire when called from root (which enforces `<=18`), so it
-     changes nothing about the deployed behavior.
+  3. **`vpc_cidr` validated at `/20` inside the module, not `/18` — corrected to `/18` in the
+     REVIEW.md F-12 fix.** Phase-01 §1.2 asks for "a precondition (or validation in Phase 0)
+     proving the VPC is at least a /20." Phase 0 already added a root-level `validation` block
+     requiring `/18` or larger (stricter than /20) on the root `var.vpc_cidr` — satisfying the
+     "or validation in Phase 0" option. This phase originally added a *looser* `/20` `validation`
+     block on the module's own `vpc_cidr` input as well, reasoning it would "never fire when
+     called from root" and so "changes nothing about the deployed behavior" — true only when the
+     module is called through the root's own `/18` gate. **That reasoning missed the module's own
+     documented purpose: staying self-defending if called directly, bypassing the root check** —
+     and at `/20` it does not defend against much, since `cidrsubnet(...,8,101)` only actually
+     fails at `/25`, not `/20`; the real reason to hold the line at `/18` is that the computed
+     intra subnets are a fixed `/24` slice regardless of `vpc_cidr`'s size, and a `/19`–`/20` VPC
+     shrinks *other* things around it in ways the module's original comment ("so cidrsubnet()
+     cannot fail") did not actually describe. Tightened to `/18`, matching the root's own
+     invariant exactly, so a direct call to this module can no longer admit a CIDR the root would
+     have rejected. See REVIEW.md F-12 for the full analysis.
 
 - Names added to interface-contract.md: none. `modules/network`'s 8 inputs and
   7 outputs were implemented exactly as specified in §5.1 (verified by diffing

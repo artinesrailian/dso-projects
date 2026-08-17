@@ -214,7 +214,7 @@ metadata:
     # In-tree Pod Security Admission. Terraform-managed, so `helm upgrade` on the
     # next apply restores these if anyone strips them.
     pod-security.kubernetes.io/enforce: restricted
-    pod-security.kubernetes.io/enforce-version: v1.36
+    pod-security.kubernetes.io/enforce-version: latest  # REVIEW.md F-22: tracks kubernetes_version
     pod-security.kubernetes.io/audit: restricted
     pod-security.kubernetes.io/warn: restricted
 ---
