@@ -291,6 +291,27 @@ is also why nothing in this stack gates a `count` on cluster state.
 
 Do not move to the next stage until the current one passes.
 
+> **`terraform output` is not reliable mid-sequence.** A `-target`-scoped apply (stages 1–3)
+> only writes state for outputs that depend on the targeted module. `region` (outputs.tf) is a
+> bare `var.region` passthrough with no resource dependency, so it's absent from state until the
+> full untargeted apply (stage 4) converges — `terraform output -raw region` fails with `Error:
+> Output "region" not found` right after stage 2, on this runbook's own documented path.
+> `scripts/teardown.sh` and `scripts/verify.sh` read it the same way, but both are meant to run
+> only after stage 4 anyway. If you need the region before then, use `$AWS_REGION` (used the same
+> way elsewhere in this doc) or read it from `backend.hcl`, not `terraform output`. After each
+> stage, a bare `terraform output` (no `-raw`, no name) shows you what's actually in state before
+> you trust any value below.
+>
+> **Do not "fix" this with `terraform apply -refresh-only` between staged applies.** Unlike
+> `-target`, refresh evaluates the full, unfiltered configuration graph — including modules not
+> yet applied. This repo's `module.karpenter` submodule (vendored
+> `terraform-aws-modules/eks//modules/karpenter`) unconditionally indexes
+> `aws_sqs_queue.this[0].arn` and `aws_iam_role.node[0].arn` in its own policy documents; before
+> stage 3 has run those resources have zero instances in state, and `-refresh-only` aborts with
+> `Invalid index: ... is empty tuple` before reaching the apply-confirmation step. Nothing
+> destructive happens, but nothing gets fixed either. `-refresh-only` is safe only after the full
+> stage 4 apply has converged.
+
 ```bash
 # After stage 1
 terraform output vpc_id
@@ -299,8 +320,8 @@ aws ec2 describe-subnets --filters "Name=vpc-id,Values=$(terraform output -raw v
 aws ec2 describe-nat-gateways --filter "Name=vpc-id,Values=$(terraform output -raw vpc_id)" \
   --query 'length(NatGateways[?State==`available`])'           # 3 (or 1 if single_nat_gateway)
 
-# After stage 2
-aws eks update-kubeconfig --region "$(terraform output -raw region)" \
+# After stage 2 — $AWS_REGION, not `terraform output -raw region` (see the note above)
+aws eks update-kubeconfig --region "$AWS_REGION" \
   --name "$(terraform output -raw cluster_name)"
 kubectl get nodes                                              # 2 Ready
 kubectl get pods -A --field-selector=status.phase=Pending      # must be empty
