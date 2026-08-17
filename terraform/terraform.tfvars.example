@@ -51,12 +51,14 @@ alert_email = "you@example.com"
 # cluster_enabled_log_types = ["audit"] # audit only:            ~$2-10/mo (was ~$5-30)
 # cluster_log_retention_days = 7     # shorter retention
 
-# bootstrap_node_min_size stays at 2 — the Karpenter chart runs 2 replicas with
-# a required podAntiAffinity, so dropping to 1 deadlocks Karpenter itself, not
-# just its HA (README §Configuration, gotchas G-05). Lowering only min_size
-# wouldn't shrink the group anyway (desired_size stays 2 and the module
-# ignores later changes to it — gotchas G-06), so there is no saving available
-# here at all. (REVIEW.md F-05.)
+# bootstrap_node_min_size stays at 2 by default. Setting only this to 1 saves
+# nothing — bootstrap_node_desired_size is a separate variable that also
+# defaults to 2, so the group stays at 2 nodes either way (REVIEW.md F-05). If
+# you deliberately set BOTH to 1: the Karpenter chart's second replica sits
+# Pending forever (needs 2 distinct nodes for its required podAntiAffinity) —
+# not a deadlock, the leader still autoscales, but you lose HA and the chart's
+# own PodDisruptionBudget then blocks rotating that one node (gotchas G-05,
+# REVIEW.md F-09).
 
 # -----------------------------------------------------------------------------
 # Everything else (project_name, environment, region, kubernetes_version, the

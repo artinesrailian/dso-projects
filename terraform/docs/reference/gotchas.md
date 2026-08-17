@@ -75,14 +75,20 @@ the cycle; do both.
 
 ### G-05 · Only one Karpenter replica ever runs
 
-**Symptom.** One Karpenter pod `Running`, one `Pending` forever. No autoscaling happens. Karpenter
-never fixes it.
+**Symptom.** One Karpenter pod `Running`, one `Pending` forever.
 
 **Root cause.** The chart runs `replicas: 2` with a **required** `podAntiAffinity` on
-`kubernetes.io/hostname`, so it needs two distinct nodes. And Karpenter's own node affinity requires
-`karpenter.sh/nodepool` `DoesNotExist` — it structurally will not launch capacity to run itself.
+`kubernetes.io/hostname`, so it needs two distinct nodes; the bootstrap node group has fewer than
+two. Not a deadlock — Karpenter uses leader election, so the one Running replica autoscales
+normally. What's actually lost is HA, and the chart's own PodDisruptionBudget
+(`maxUnavailable: 1`) then blocks evicting that one node during a rotation, since there's no
+second Ready replica to fail over to. (Verified against the pinned chart's `values.yaml`:
+`strategy.rollingUpdate.maxUnavailable: 1` and `podDisruptionBudget.maxUnavailable: 1` — `helm
+--wait` is satisfied by one Ready replica, so `terraform apply` succeeds, it doesn't time out.
+REVIEW.md F-09.)
 
-**Fix.** Bootstrap node group `min_size = 2` / `desired_size = 2`. Or reduce `replicas`, losing HA.
+**Fix.** Bootstrap node group `min_size = 2` / `desired_size = 2` for HA. Running with one is a
+legitimate cost trade-off, not a bug — just expect rotation of that node to stall on the PDB.
 
 **Related trap:** raising `desired_size` in HCL to fix this does nothing — see G-06.
 

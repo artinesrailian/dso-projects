@@ -323,7 +323,7 @@ below); empty by default, meaning that alert is silent until you set it.
 | `budget_notification_email` | required | Who gets the AWS Budget alert. |
 | `create_spot_service_linked_role` | `false` | Set `true` only after confirming `AWSServiceRoleForEC2Spot` doesn't already exist. |
 | `single_nat_gateway` | `false` | One NAT instead of one per AZ — cheaper, loses HA. |
-| `bootstrap_node_min_size` | `2` | Karpenter's chart runs 2 replicas with a required anti-affinity — dropping to `1` deadlocks Karpenter, not just its HA (gotchas G-05). The cost table in the ADR still frames this as "loses HA"; that framing predates the requirement being pinned down. Leave at `2`. |
+| `bootstrap_node_min_size` | `2` | Karpenter's chart runs 2 replicas with a required anti-affinity — dropping to `1` (along with `bootstrap_node_desired_size`, a separate variable) leaves the second replica `Pending` forever. Not a deadlock: the leader still autoscales via leader election. You lose HA, and the chart's own PodDisruptionBudget then blocks rotating that one node (gotchas G-05). Leave at `2` unless you've accepted that trade-off. |
 | `nodepool_default_arch` | `"arm64"` | Which pool wins when a pod sets no `kubernetes.io/arch`. |
 | `node_ami_alias` | `"al2023@latest"` | Pin to a release tag for production — see Operations below. |
 | `region` | `"us-east-1"` | AWS region. |
@@ -398,9 +398,10 @@ Full record, including rejected alternatives:
 Full list: [docs/reference/gotchas.md](docs/reference/gotchas.md). The four most likely to hit a
 first deploy:
 
-- Set `bootstrap_node_min_size = 1` to save cost (see Configuration) and Karpenter itself gets
-  stuck: it needs two distinct nodes for its own required `podAntiAffinity`, so the second
-  replica sits `Pending` forever and nothing autoscales (gotchas G-05).
+- Set `bootstrap_node_min_size` (and `bootstrap_node_desired_size`) `= 1` and Karpenter's second
+  replica sits `Pending` forever — it needs two distinct nodes for its required `podAntiAffinity`.
+  The leader still autoscales fine; you've traded HA and PDB-blocked node rotation, not
+  functionality (gotchas G-05).
 - Pods stay `Pending`, Karpenter logs `VcpuLimitExceeded` → the account's default 5-vCPU quota
   (gotchas G-02, see Prerequisites).
 - Spot launches fail with `AuthFailure.ServiceLinkedRoleCreationNotPermitted` → the Spot

@@ -217,6 +217,12 @@ states the old behaviour, so the fix does not leave the docs contradicting the c
 - **Fix:** reword to "second replica stays Pending — HA lost and rotating that single node stalls on
   the chart's PDB; the leader still autoscales. Leave at 2." in all four places; delete the README
   sentence calling the ADR framing outdated.
+- **Status: Fixed outside WP-3**, ahead of the first live apply, after this finding was
+  re-verified against the pinned chart's actual `values.yaml` (`strategy.rollingUpdate.maxUnavailable:
+  1`, `podDisruptionBudget.maxUnavailable: 1`) rather than taken on the review's word alone. All four
+  cited locations reworded, plus `terraform.tfvars.example`'s own comment (introduced by the
+  doc-consistency commit, which had inherited the same wrong claim from README.md). WP-3's other
+  findings remain open.
 
 **F-10 · "Karpenter picks the cheapest one / across both NodePools" misdescribes weight-based selection** — `README.md:353-354`, `examples/README.md:42`
 - For an unconstrained pod Karpenter takes the highest-weight compatible NodePool, then the cheapest
