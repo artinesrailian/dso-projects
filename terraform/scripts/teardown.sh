@@ -115,39 +115,50 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step "2/6 Deleting NodeClaims so Karpenter drains and terminates its nodes"
+step "2/6 Deleting NodePools, then NodeClaims, so Karpenter drains and terminates its nodes"
 
-# This is the step that breaks the deadlock. The controller is still running
-# right now, so it honours the karpenter.sh/termination finalizer, cordons and
-# drains each node, and calls TerminateInstances. Do this after the controller
-# is gone and the finalizer is never reconciled (G-10).
+# NodePools first (REVIEW.md F-23): deleting one cascades to its NodeClaims
+# and blocks new launches, closing the window where Karpenter could
+# re-provision between "zero instances" (step 3) and terraform destroy (step 4).
+kubectl delete nodepools --all --wait=true --timeout=15m || true
+
+# Belt-and-braces: drain any NodeClaim not owned by a NodePool while the
+# controller is still running to honour the termination finalizer — do this
+# before the controller is gone and the finalizer stops being reconciled (G-10).
 kubectl delete nodeclaims --all --wait=true --timeout=15m || true
-ok "NodeClaim deletion returned"
+ok "NodePools and NodeClaims deletion returned"
 
 # ---------------------------------------------------------------------------
 step "3/6 Verifying no Karpenter instances remain"
 
 # A failed AWS call must NOT read as "empty, therefore safe". Capture the exit
 # status separately from the output and treat an error as a hard stop.
+#
+# NOTE (REVIEW.md F-03): this used to query karpenter.sh/managed-by, a tag
+# Karpenter v1.14.0 no longer sets — the gate rested on karpenter.sh/nodepool=*
+# alone, which isn't cluster-scoped and would abort forever (or false-pass G-09's
+# recovery recipe) in a region running another Karpenter cluster. Fixed by
+# ANDing that tag with a cluster-scoped one, checked two independent ways.
 query_instances() {
   aws ec2 describe-instances --region "$REGION" \
-    --filters "Name=tag:$1,Values=$2" \
+    --filters "Name=tag:karpenter.sh/nodepool,Values=*" \
+              "Name=tag:$1,Values=$2" \
               "Name=instance-state-name,Values=running,pending,stopping,stopped" \
     --query 'Reservations[].Instances[].InstanceId' --output text
 }
 
-if ! MANAGED="$(query_instances 'karpenter.sh/managed-by' "$CLUSTER")"; then
+if ! PRIMARY="$(query_instances 'eks:eks-cluster-name' "$CLUSTER")"; then
   abort "could not query EC2 for surviving Karpenter instances.
        Refusing to proceed blind — resolve the AWS error above and re-run."
 fi
-if ! POOLED="$(query_instances 'karpenter.sh/nodepool' '*')"; then
+if ! SECOND="$(query_instances "kubernetes.io/cluster/$CLUSTER" 'owned')"; then
   abort "could not query EC2 for surviving Karpenter instances.
        Refusing to proceed blind — resolve the AWS error above and re-run."
 fi
 
-# The two tags mark the same instances in a healthy cluster; querying both
-# catches an instance whose tagging was interrupted mid-launch.
-LEFT="$(printf '%s\n%s\n' "$MANAGED" "$POOLED" | tr '\t' '\n' | grep -v '^$' | sort -u || true)"
+# Two independent tag keys Karpenter v1.14.0 sets on every launched instance,
+# so a gap in one does not silently pass the gate.
+LEFT="$(printf '%s\n%s\n' "$PRIMARY" "$SECOND" | tr '\t' '\n' | grep -v '^$' | sort -u || true)"
 
 if [ -n "$LEFT" ]; then
   printf '\n%sSTOP%s  Karpenter instances are still running:\n' "$RED" "$RST" >&2
@@ -177,6 +188,13 @@ step "4b/6 Sweeping EBS volumes left behind by PVCs"
 # StatefulSet volumeClaimTemplates are RETAINED by default when the workload is
 # deleted, and dynamically-provisioned PVs are invisible to Terraform. Left
 # alone the spend outlives the cluster — gp3 is ~$0.08/GiB-month, forever.
+# This delete branch only matches if the CSI driver is tagging with
+# kubernetes.io/cluster/<name>=owned, which per its own tagging.md is NOT the
+# default (needs the add-on's --k8s-tag-cluster-id flag) — check:
+#   kubectl -n kube-system get deploy ebs-csi-controller \
+#     -o jsonpath='{.spec.template.spec.containers[0].args}'
+# If absent this branch is a silent no-op; the report below still lists every
+# orphaned volume regardless, so nothing goes untracked.
 aws ec2 describe-volumes --region "$REGION" \
   --filters "Name=tag:kubernetes.io/cluster/$CLUSTER,Values=owned" "Name=status,Values=available" \
   --query 'Volumes[].VolumeId' --output text 2>/dev/null | tr '\t' '\n' | grep -v '^$' \

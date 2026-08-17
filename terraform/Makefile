@@ -19,10 +19,12 @@ validate:
 ## test: run terraform test — this is what proves the security guards actually fire
 test:
 	$(TF) test
-## lint: tflint + checkov, if installed
+## lint: tflint + checkov + helm lint + kubeconform, each if installed
 lint:
 	@command -v tflint >/dev/null && tflint --recursive || echo "tflint not installed, skipping"
 	@command -v checkov >/dev/null && checkov -d . --framework terraform --compact || echo "checkov not installed, skipping"
+	@command -v helm >/dev/null && helm lint modules/cluster-resources/chart || echo "helm not installed, skipping"
+	@command -v kubeconform >/dev/null && kubeconform -strict -summary -kubernetes-version 1.36.0 examples/*.yaml || echo "kubeconform not installed, skipping"
 
 # ---------- day 0 ----------
 ## bootstrap: create the S3 + KMS state backend (once per account)
@@ -73,7 +75,7 @@ demo-clean:
 # ---------- teardown ----------
 ## destroy: ORDERED teardown. Never use a bare `terraform destroy` — see gotchas G-09.
 destroy:
-	@test -x scripts/teardown.sh || { echo "scripts/teardown.sh does not exist yet (it ships in Phase 8)."; \
+	@test -x scripts/teardown.sh || { echo "scripts/teardown.sh is missing or not executable."; \
 		echo "Refusing to fall back to a bare 'terraform destroy' — see docs/reference/gotchas.md G-09."; exit 1; }
 	./scripts/teardown.sh
 

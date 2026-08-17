@@ -234,8 +234,9 @@ spec:
     # a bare PVC provisions real EBS. gp3 tops out at 16 TiB (~$1,310/mo each)
     # and a pod can mount ~25. Twenty volumes is ~$26,000/month while consuming
     # 100m of the CPU quota. Worse, StatefulSet volumeClaimTemplates are RETAINED
-    # on delete and teardown.sh does not sweep EBS — the spend outlives the
-    # cluster. A quota with no storage dimension is not a cost control.
+    # on delete and teardown.sh only REPORTS orphaned EBS volumes for manual
+    # review (REVIEW.md F-24) — the spend outlives the cluster either way.
+    # A quota with no storage dimension is not a cost control.
     persistentvolumeclaims: "10"
     requests.storage: 200Gi
     gp3.storageclass.storage.k8s.io/requests.storage: 200Gi

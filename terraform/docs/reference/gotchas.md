@@ -170,18 +170,34 @@ Terraform-specific ordering at all.
 kubectl delete -f examples/ --ignore-not-found
 kubectl delete namespace demo --ignore-not-found
 
-# 2. Explicitly delete NodeClaims and WAIT. Karpenter drains and terminates them.
+# 2. Delete NodePools first — cascades to their NodeClaims via owner
+#    references and blocks Karpenter from launching anything new against
+#    them. Then delete NodeClaims explicitly as belt-and-braces. WAIT on
+#    both; Karpenter drains and terminates while the controller is alive.
+kubectl delete nodepools --all --wait=true --timeout=15m
 kubectl delete nodeclaims --all --wait=true --timeout=15m
 
 # 3. Prove nothing is left before touching Terraform.
 aws ec2 describe-instances \
-  --filters "Name=tag:karpenter.sh/managed-by,Values=$CLUSTER" "Name=instance-state-name,Values=running" \
+  --filters "Name=tag:karpenter.sh/nodepool,Values=*" \
+            "Name=tag:eks:eks-cluster-name,Values=$CLUSTER" \
+            "Name=instance-state-name,Values=running,pending,stopping,stopped" \
   --query 'Reservations[].Instances[].InstanceId' --output text
 # Must be empty.
 
 # 4. Now destroy.
 terraform destroy
 ```
+
+**On the tag in step 3 — read this before trusting an older copy of this recipe.** An earlier
+version of this fix (and of `scripts/teardown.sh`) queried `karpenter.sh/managed-by`. Karpenter's own
+v1 migration guide states that tag was **replaced by `eks:eks-cluster-name`** — v1.14.0 does not set
+it at all. Querying it alone means step 3 always finds nothing, which reads as "safe to destroy"
+whether or not instances are actually running — the exact failure this whole fix exists to prevent.
+`karpenter.sh/nodepool=*` is not cluster-scoped by itself either (it matches *any* Karpenter cluster
+in the region); ANDing it with a cluster-scoped tag, as above, is what makes the check real.
+`scripts/teardown.sh` runs this same query two independent ways (`eks:eks-cluster-name` and
+`kubernetes.io/cluster/<name>=owned`) so a gap in one tag doesn't silently pass the gate.
 
 Phase 8 turns this into a scripted, verified runbook.
 

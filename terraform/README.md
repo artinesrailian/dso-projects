@@ -423,13 +423,19 @@ It asks you to type the cluster name, then works in this order:
 1. Workloads  — delete examples/, the demo namespace, and every Service
                 type=LoadBalancer and Ingress; poll until their AWS load
                 balancers are actually gone (their ENIs block subnet deletion).
-2. NodeClaims — delete them all and wait, while the Karpenter controller is
-                STILL RUNNING, so it drains and terminates each node properly.
-3. Prove it   — query EC2 on two Karpenter tags. If any instance survives, the
-                script EXITS NON-ZERO here and destroys nothing.
+2. NodePools,
+   NodeClaims — delete NodePools first (blocks new launches, cascades to their
+                NodeClaims), then NodeClaims explicitly as belt-and-braces —
+                while the Karpenter controller is STILL RUNNING, so it drains
+                and terminates each node properly.
+3. Prove it   — query EC2 for surviving Karpenter instances two independent
+                ways. If any instance survives, the script EXITS NON-ZERO
+                here and destroys nothing.
 4. Destroy    — only now, terraform destroy.
-5. Sweep      — EBS volumes and launch templates Karpenter created outside
-                Terraform state, then a residual check.
+5. Sweep      — launch templates Karpenter created outside Terraform state,
+                deleted; orphaned EBS volumes from PVCs, listed for manual
+                review (not blindly deleted — see gotchas.md G-11); then a
+                residual check.
 ```
 
 Step 3 is the point of the whole script: it will not hand over to Terraform on an unproven

@@ -716,7 +716,62 @@ which are gaps in the review's own package boundaries rather than defects in WP-
 
 ### WP-2
 
-*(pending)*
+**Status: DONE.** All findings covered by WP-2 addressed as their stated fix. Acceptance criteria
+all pass, pasted below.
+
+**Files changed:** `scripts/teardown.sh`, `scripts/verify.sh`, `Makefile`,
+`docs/reference/gotchas.md` (G-09 block), `docs/phases/phase-08-verification-teardown.md`,
+`docs/AUDIT.md` (S-C5, S-22, S-29), `modules/cluster-resources/chart/templates/namespaces.yaml:39-44`,
+`docs/phases/phase-05-nodepools.md:237`, `README.md` (only the Teardown step list — WP-3 has not
+run).
+
+**Per-finding status:**
+
+| # | Status | Notes |
+|---|---|---|
+| F-03 | Done | The real defect, not a cosmetic one: `karpenter.sh/managed-by` was replaced by `eks:eks-cluster-name` in Karpenter v1 and is never set by v1.14.0, so the "primary net" always found nothing and the gate rested entirely on `karpenter.sh/nodepool=*` — not cluster-scoped, so this would abort forever in a region running any other Karpenter cluster, and the manual G-09 recipe would report "nothing left" on every v1 cluster (the exact false-safe the script exists to prevent). `query_instances()` now ANDs `karpenter.sh/nodepool=*` with a cluster-scoped tag, checked two independent ways (`eks:eks-cluster-name` and `kubernetes.io/cluster/<name>=owned`). The "interrupted mid-launch" comment (also inaccurate) is gone. Fixed identically in `gotchas.md` G-09's recipe, `phase-08-verification-teardown.md` §8.2's snippet, and both places phase-08's own completion report had described the old two-tag design — corrected with an explicit `> Correction (…)` block rather than silently rewriting the historical record, since the report is dated evidence of what was believed true at the time. |
+| F-04 (verify.sh assertion) | Done | §D2b now asserts `aws sns get-topic-attributes --query Attributes.KmsMasterKeyId` is empty or a real ARN, never the literal `alias/aws/sns`. |
+| F-15 | Done | `VERIFY_EXPECT_LOG_TYPES` env override (default the five), looped over instead of the hardcoded list. Documented plainly that the README's own POC example fails this check by design and that is not a bug. |
+| F-16 | Done | `make lint` now also runs `helm lint modules/cluster-resources/chart` (ran clean: 1 chart linted, 0 failed) and `kubeconform` guarded the same way as `tflint`/`checkov` (gracefully skipped — not installed here). `## lint:` help line updated. |
+| F-19 (Makefile) | Done | `destroy`'s guard message changed from "does not exist yet (it ships in Phase 8)" — stale now that it has — to "is missing or not executable". The `test -x` guard itself is unchanged. |
+| F-23 | Done | `kubectl delete nodepools --all --wait=true --timeout=15m` added immediately before the NodeClaims delete, in both `scripts/teardown.sh` and the `phase-08` §8.2 spec snippet and `gotchas.md` G-09's recipe. Step 2's comment, `README.md`'s step list and `AUDIT.md` S-C5 all updated to describe NodePools-then-NodeClaims. The **new** ordering assertion (NodePools < NodeClaims < destroy) passes against the shipped script. |
+| F-24 | Done, wording only | `teardown.sh`'s EBS delete-branch comment now states plainly it only matches if the CSI driver tags with `kubernetes.io/cluster/<name>=owned` (not the default per the driver's own `tagging.md`) and points at the exact `kubectl` command to check on the first live run. Mirrored in `namespaces.yaml`'s comment and `phase-05-nodepools.md:237` ("does not sweep EBS" → "only REPORTS orphaned EBS volumes"), `README.md`'s Teardown step 5, and `AUDIT.md` S-C5. No add-on `configuration_values` added, per the prompt's explicit instruction not to. |
+
+**Acceptance criteria (all from `terraform/`):**
+
+```console
+$ bash -n scripts/verify.sh && bash -n scripts/teardown.sh && shellcheck scripts/*.sh
+(all clean, exit 0)
+
+$ awk '/kubectl delete nodepools/{p=NR} /kubectl delete nodeclaims/{n=NR} /terraform destroy/{d=NR} END{ if(p&&n&&d&&p<n&&n<d) print "PASS ordering"; else print "FAIL ordering"}' scripts/teardown.sh
+PASS ordering
+
+$ grep -c 'karpenter.sh/managed-by' scripts/teardown.sh docs/reference/gotchas.md
+scripts/teardown.sh:1
+docs/reference/gotchas.md:1
+$ grep -n 'karpenter.sh/managed-by' scripts/teardown.sh docs/reference/gotchas.md
+scripts/teardown.sh:143:# NOTE (REVIEW.md F-03): this used to query karpenter.sh/managed-by, which
+docs/reference/gotchas.md:193:version of this fix (and of `scripts/teardown.sh`) queried `karpenter.sh/managed-by`. Karpenter's own
+(both are explanatory notes describing what changed and why, not live usage)
+
+$ make lint
+tflint not installed, skipping
+checkov not installed, skipping
+==> Linting modules/cluster-resources/chart
+[INFO] Chart.yaml: icon is recommended
+1 chart(s) linted, 0 chart(s) failed
+kubeconform not installed, skipping
+
+$ make check
+8 passed, 0 failed (unchanged from WP-1 — WP-2 touches no .tf/.hcl)
+tflint/checkov: not installed, skipping (unchanged)
+helm lint: 1 chart(s) linted, 0 chart(s) failed
+kubeconform: not installed, skipping
+```
+
+**Anything found on the way that belongs to another package:** none. The `README.md` edit was
+confirmed in-scope before making it — WP-2's file list explicitly allows the Teardown step list
+"only if WP-3 has not run yet", and it has not.
 
 ### WP-3
 
