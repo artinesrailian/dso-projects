@@ -45,15 +45,32 @@ for t in terraform aws kubectl; do
   command -v "$t" >/dev/null 2>&1 || abort "required tool not on PATH: $t"
 done
 
-# On an uninitialised or empty state this errors opaquely at line 1. Catch it
-# and say the useful thing instead.
-CLUSTER="$(terraform output -raw cluster_name 2>/dev/null || true)"
-REGION="$(terraform output -raw region 2>/dev/null || true)"
+# On an uninitialised or empty state `terraform output` errors opaquely at
+# line 1 — but a transient S3 backend read hiccup prints a similarly opaque
+# error too, and discarding stderr made the two indistinguishable (observed
+# live: this aborted with "no readable Terraform state" moments before a
+# plain `terraform state list` succeeded with every resource intact). One
+# retry before giving up, and the real error surfaces instead of being
+# thrown away.
+tf_output() {
+  local out
+  out="$(terraform output -raw "$1" 2>&1)" && { printf '%s' "$out"; return 0; }
+  sleep 3
+  out="$(terraform output -raw "$1" 2>&1)" && { printf '%s' "$out"; return 0; }
+  printf '%s' "$out"
+  return 1
+}
+
+TF_CLUSTER_ERR=""
+if CLUSTER="$(tf_output cluster_name)"; then :; else TF_CLUSTER_ERR="$CLUSTER"; CLUSTER=""; fi
+TF_REGION_ERR=""
+if REGION="$(tf_output region)"; then :; else TF_REGION_ERR="$REGION"; REGION=""; fi
 ENDPOINT="$(terraform output -raw cluster_endpoint 2>/dev/null || true)"
 VPC_ID="$(terraform output -raw vpc_id 2>/dev/null || true)"
 
 if [ -z "$CLUSTER" ] || [ -z "$REGION" ]; then
-  abort "no readable Terraform state in $(pwd).
+  abort "could not read Terraform outputs 'cluster_name'/'region' after retrying once.
+       Real error: ${TF_CLUSTER_ERR:-$TF_REGION_ERR}
        Either nothing was ever applied (there is nothing to tear down), or the
        backend is not initialised — run 'terraform init -backend-config=backend.hcl' first."
 fi
@@ -176,6 +193,42 @@ EOF
   exit 1
 fi
 ok "zero Karpenter instances remain — safe to hand over to Terraform"
+
+# A Spot Instance Request is a DISTINCT AWS object from the EC2 instance it
+# launched, and can stay open/active for a short window after the instance
+# is confirmed terminated. terraform destroy's aws_iam_service_linked_role.spot
+# deletion checks REQUEST state, not instance state, so the two checks can
+# disagree during that lag — observed live: the role deletion failed with
+# "Open or Active spot instance requests found" moments after this script had
+# already confirmed zero instances. The window is transient (re-checking a
+# few minutes later showed the same request closed), so poll instead of
+# failing on the first look. The service-linked role is account/region-wide,
+# not scoped to this cluster, so unlike the instance check above, this one is
+# deliberately NOT tag-filtered — a request from unrelated Spot usage in the
+# same account still blocks the same deletion.
+note "waiting for open/active Spot Instance Requests to clear..."
+SPOT_CLEAR=0
+for i in $(seq 1 6); do
+  if ! SPOT_LEFT="$(aws ec2 describe-spot-instance-requests --region "$REGION" \
+        --filters Name=state,Values=open,active \
+        --query 'SpotInstanceRequests[].SpotInstanceRequestId' --output text)"; then
+    abort "could not query EC2 for open Spot Instance Requests.
+       Refusing to proceed blind — resolve the AWS error above and re-run."
+  fi
+  SPOT_LEFT="$(printf '%s' "$SPOT_LEFT" | tr '\t' '\n' | grep -v '^$' || true)"
+  if [ -z "$SPOT_LEFT" ]; then SPOT_CLEAR=1; break; fi
+  note "  still open/active ($i/6) — waiting 30s..."
+  sleep 30
+done
+if [ "$SPOT_CLEAR" != "1" ]; then
+  abort "Spot Instance Requests still open/active after 3 minutes:
+$(printf '%s\n' "$SPOT_LEFT" | sed 's/^/       /')
+       terraform destroy will fail deleting aws_iam_service_linked_role.spot while these are
+       open. This is usually AWS's own eventual-consistency lag, not a real leak — wait a few
+       more minutes and re-run ./scripts/teardown.sh. If it never clears, investigate with:
+       aws ec2 describe-spot-instance-requests --region $REGION --filters Name=state,Values=open,active"
+fi
+ok "zero open/active Spot Instance Requests remain"
 
 # ---------------------------------------------------------------------------
 step "4/6 Destroying the Terraform-managed stack"
