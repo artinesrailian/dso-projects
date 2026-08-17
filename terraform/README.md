@@ -76,7 +76,9 @@ to run a pod on either architecture with one label.
 - **EC2 vCPU quota.** A fresh account's default 5-vCPU On-Demand quota is 80% consumed by the
   bootstrap node group alone — request an increase on both codes before the first apply. Check:
   `aws service-quotas get-service-quota --service-code ec2 --quota-code L-1216C47A` (and
-  `L-34B43A08` for Spot).
+  `L-34B43A08` for Spot). `request_service_quotas` can open both requests for you in Terraform, but
+  defaults `false` — it errors if the quota is already above target or a request is already open, so
+  only set it `true` on a fresh account with nothing pending (see the variable description).
 - **Tooling.** Terraform ≥1.11, AWS CLI ≥2.30, kubectl within ±1 minor of 1.36, Helm ≥3.19 —
   see [docs/reference/version-pinning.md](docs/reference/version-pinning.md).
 

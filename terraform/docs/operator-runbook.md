@@ -443,10 +443,15 @@ aws ce get-cost-and-usage --time-period Start=2026-08-01,End=2026-08-31 \
   --filter '{"Tags":{"Key":"Project","Values":["opsfleet"]}}'
 ```
 
-> **Terraform activates the cost allocation tags for you** (`aws_ce_cost_allocation_tag`, phase-00) —
-> this is *not* the manual Billing-console step most guides describe. But activation still takes up
-> to **24 hours** to take effect, so the budget filter matches nothing and spend looks untagged until
-> then. That is an AWS propagation delay, not a missing step.
+> **Cost allocation tags are opt-in** — set `activate_cost_allocation_tags = true` (default `false`)
+> to have Terraform activate them (`aws_ce_cost_allocation_tag`, phase-00/`budget.tf`). This only
+> succeeds from a management or standalone account, and only after the `Project`/`Environment` tag
+> keys have appeared in billing data (usually the first tagged resource plus up to **24 hours**) — in
+> an AWS Organizations member account it fails permanently instead (`Linked account doesn't have
+> access`). If either applies to you, activate manually instead: Billing console, or
+> `aws ce update-cost-allocation-tags-status --cost-allocation-tags-status
+> TagKey=Project,Status=Active TagKey=Environment,Status=Active`. Either way, allow up to 24h before
+> the cost-and-usage filter below matches anything. (REVIEW.md F-01, gated in WP-1.)
 
 The biggest levers: `single_nat_gateway = true` (−$66/mo, single point of failure) and leaving
 `enable_vpc_endpoints = false` (the default — turning it on is +$263/mo).

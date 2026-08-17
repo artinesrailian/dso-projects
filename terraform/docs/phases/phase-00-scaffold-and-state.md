@@ -419,6 +419,12 @@ recorded, repeatable and reviewable), but Phase 8's `verify.sh` must still asser
 quota with `get-service-quota` before declaring the cluster ready. Default `request_service_quotas`
 to `true` and document that a refusal needs a support ticket.
 
+> Correction (REVIEW.md F-02, applied in WP-1): default flipped to `false`. Provider 6.60.0's
+> `aws_servicequotas_service_quota` Create errors if the current quota is already ≥ target, and a
+> pending manual request throws `ResourceAlreadyExistsException` on Create (only Update swallows it)
+> — so a `true` default breaks the apply on any account that isn't fresh with nothing pending,
+> including one that already followed this doc's own "request an increase" guidance. Opt-in only.
+
 ### 0.8 `main.tf` and `outputs.tf`
 
 Header comment only. Something like:
