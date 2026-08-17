@@ -165,6 +165,25 @@ aws ec2 describe-instance-type-offerings --region "$AWS_REGION" \
 There is **no separate Graviton quota** — arm64 families (`t4g`, `m7g`, `c7g`, `r8g`) are all
 T/M/C/R and draw from the same Standard pool as x86. Adding an arm64 NodePool buys no headroom.
 
+**Prefer not to file a quota increase at all?** Set `nodepool_cpu_limit` (variables.tf, default
+`100`) in `terraform.tfvars` to a value comfortably under `account_quota - bootstrap_group_vcpu`
+(bootstrap defaults to 4 vCPU: 2 × `t4g.medium`). On an account already sitting at, say, 32 vCPU
+rather than the fresh-account default of 5, that leaves 28 headroom — set
+`nodepool_cpu_limit = 20` or so, not 28, so a transient over-provision during consolidation
+doesn't hit the wall either. Karpenter then never asks AWS for more capacity than the account can
+actually grant, so there's nothing to wait on.
+
+This only works if you size it against the right ceiling: `nodepool_cpu_limit` is a single total
+that Phase 5 divides across every *enabled* NodePool (both amd64 and arm64 by default, so each
+gets half) — but that division is Karpenter-side bookkeeping only. Both NodePools still draw from
+the SAME account-level vCPU quotas underneath (`L-1216C47A`/`L-34B43A08`), not independent ones
+per architecture or per pool. Size against "the account quota minus the bootstrap group", not
+against some larger figure assuming two pools double your room.
+
+Either path — increase the quota, or cap `nodepool_cpu_limit` below it — the failure mode if you
+get the sizing wrong is the same: `VcpuLimitExceeded` in Karpenter's logs, which is gotchas.md
+G-02, not a Karpenter misconfiguration.
+
 ---
 
 ## 2. Day 0 — Remote state backend
