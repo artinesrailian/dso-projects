@@ -38,7 +38,14 @@ resource "aws_iam_role" "ebs_csi" {
   tags               = var.tags
 }
 
+# Resolved by name, not a hardcoded ARN path — AWS's own docs disagree on
+# whether AmazonEBSCSIDriverPolicyV2 lives under .../service-role/ or not,
+# and guessing wrong 404s the first apply. (REVIEW.md F-06.)
+data "aws_iam_policy" "ebs_csi" {
+  name = "AmazonEBSCSIDriverPolicyV2"
+}
+
 resource "aws_iam_role_policy_attachment" "ebs_csi" {
   role       = aws_iam_role.ebs_csi.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicyV2"
+  policy_arn = data.aws_iam_policy.ebs_csi.arn
 }

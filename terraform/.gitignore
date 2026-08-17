@@ -3,6 +3,10 @@
 *.tfstate
 *.tfstate.*
 *.tfplan
+# The Makefile saves plans as tf.plan, not *.tfplan — a saved plan embeds
+# every variable value, prior state and planned attributes (CA data, ARNs,
+# emails, allowlist CIDRs), so it needs the same protection as state itself.
+*.plan
 crash.log
 crash.*.log
 

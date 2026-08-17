@@ -253,13 +253,27 @@ for _ in $(seq 1 30); do
   sleep 10
 done
 
-echo "==> 2/6 Deleting NodeClaims so Karpenter drains and terminates its nodes"
+echo "==> 2/6 Deleting NodePools, then NodeClaims, so Karpenter drains and terminates its nodes"
+# NodePools first (REVIEW.md F-23): cascades to NodeClaims via owner
+# references and blocks new launches, so Karpenter cannot re-provision in
+# the gap between this step and terraform destroy. NodeClaims deleted
+# explicitly too, as belt-and-braces.
+kubectl delete nodepools --all --wait=true --timeout=15m || true
 kubectl delete nodeclaims --all --wait=true --timeout=15m || true
 
 echo "==> 3/6 Verifying no Karpenter instances remain"
+# NOT karpenter.sh/managed-by (REVIEW.md F-03) — Karpenter's own v1
+# migration guide states that tag was replaced by eks:eks-cluster-name;
+# v1.14.0 does not set it at all, so a query on it alone always finds
+# nothing, which reads as "safe to destroy" whether or not instances are
+# actually running. karpenter.sh/nodepool=* is not cluster-scoped by
+# itself either — AND it with a cluster-scoped tag, checked two
+# independent ways (the shipped script also checks
+# kubernetes.io/cluster/$CLUSTER=owned):
 LEFT=$(aws ec2 describe-instances --region "$REGION" \
-  --filters "Name=tag:karpenter.sh/managed-by,Values=$CLUSTER" \
-            "Name=instance-state-name,Values=running,pending" \
+  --filters "Name=tag:karpenter.sh/nodepool,Values=*" \
+            "Name=tag:eks:eks-cluster-name,Values=$CLUSTER" \
+            "Name=instance-state-name,Values=running,pending,stopping,stopped" \
   --query 'Reservations[].Instances[].InstanceId' --output text)
 if [ -n "$LEFT" ]; then
   echo "STOP: instances still running: $LEFT"
@@ -393,10 +407,11 @@ bash -n scripts/verify.sh && bash -n scripts/teardown.sh    # syntax
 shellcheck scripts/*.sh || true                             # if available
 chmod +x scripts/*.sh
 
-# teardown.sh must delete NodeClaims BEFORE terraform destroy — this ordering
-# is the entire point of the script.
-awk '/kubectl delete nodeclaims/{n=NR} /terraform destroy/{d=NR} END{
-  if (n && d && n < d) print "PASS: correct destroy ordering";
+# teardown.sh must delete NodePools, then NodeClaims, BEFORE terraform
+# destroy — this ordering is the entire point of the script. (Updated for
+# REVIEW.md F-23: NodePools now delete first, cascading to NodeClaims.)
+awk '/kubectl delete nodepools/{p=NR} /kubectl delete nodeclaims/{n=NR} /terraform destroy/{d=NR} END{
+  if (p && n && d && p < n && n < d) print "PASS: correct destroy ordering";
   else print "FAIL: ordering is wrong or a step is missing"}' scripts/teardown.sh
 
 # Every checklist item appears in the audit.
@@ -568,6 +583,21 @@ docs/phases/phase-08-verification-teardown.md and stop.
      matches the bootstrap node group too, which is supposed to still be running at step 3, and
      would deadlock the script against itself.
 
+     > **Correction (REVIEW.md F-03, applied in WP-2).** Both claims above about the two-tag design
+     > were wrong, and worse than merely stale: `karpenter.sh/managed-by` is a tag Karpenter's own
+     > v1 migration guide says was **replaced by `eks:eks-cluster-name`** — v1.14.0 does not set it
+     > at all. That means the query on it always found nothing, so "querying two Karpenter tags to
+     > catch an instance whose tagging was interrupted mid-launch" was not just imprecise, it
+     > described a check that could never do what it claimed — the gate rested entirely on
+     > `karpenter.sh/nodepool=*`, which is not cluster-scoped, so this script would abort forever in
+     > a region running any other Karpenter cluster. The "deliberately not filtering on
+     > `kubernetes.io/cluster/<name>=owned`" reasoning was also backwards: that tag, ANDed with
+     > `karpenter.sh/nodepool=*` (which the bootstrap MNG never carries), is now exactly what makes
+     > the check cluster-scoped. Fixed: the script now ANDs `karpenter.sh/nodepool=*` with a
+     > cluster-scoped tag, checked two independent ways (`eks:eks-cluster-name` and
+     > `kubernetes.io/cluster/<name>=owned`). See `docs/reference/gotchas.md` G-09 for the corrected
+     > recipe and `docs/AUDIT.md` S-C5 for the full account.
+
   8. **`teardown.sh` reports rather than deletes volumes matched by `ebs.csi.aws.com/cluster`.**
      §8.2 shows the cluster-tagged sweep as a delete and this one as `--output table`; the reason is
      worth stating because it looks like an oversight: that tag's value is the literal `true`, not a
@@ -667,9 +697,11 @@ docs/phases/phase-08-verification-teardown.md and stop.
      destructive action — but `verify.sh` exiting non-zero on its own bug is exactly the failure mode
      that erodes trust in it.
   2. **`teardown.sh` step 3's guarantee is only as good as Karpenter's instance tagging.** If an
-     instance carries neither `karpenter.sh/managed-by` nor `karpenter.sh/nodepool` it will not be
-     seen, and `terraform destroy` will proceed. Two tags is better than one, but this is a
-     tag-based check, not a proof.
+     instance carries neither `karpenter.sh/nodepool` nor a cluster-scoping tag it will not be seen,
+     and `terraform destroy` will proceed. Two independent nets are better than one, but this is
+     still a tag-based check, not a proof. (Updated per REVIEW.md F-03 — this risk was originally
+     recorded against `karpenter.sh/managed-by`, a tag Karpenter v1.14.0 does not set at all; see the
+     correction under deviation #7 above and `docs/AUDIT.md` S-C5.)
   3. **The §D2 RBAC assertions require the caller to hold impersonation rights.** They run as the
      cluster admin, which does. A less-privileged operator running `verify.sh` gets failures from
      their own permissions rather than from the boundary under test, and the script does not

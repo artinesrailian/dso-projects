@@ -23,6 +23,10 @@
 #   VERIFY_SKIP_SCHEDULING=1         skip §D (applies real workloads, ~10 min)
 #   VERIFY_SKIP_CONSOLIDATION=1      skip §F (waits for scale-to-zero, ~10 min)
 #   VERIFY_MIN_VCPU_QUOTA=104        floor for the EC2 vCPU quota assertion
+#   VERIFY_EXPECT_LOG_TYPES="api audit authenticator controllerManager scheduler"
+#                                     S-22's expected log-type set — override to
+#                                     match a deliberately narrowed config (e.g.
+#                                     the README's POC example)
 #
 set -uo pipefail
 
@@ -50,10 +54,12 @@ die() { printf '\n\033[31mABORT\033[0m  %s\n' "$*" >&2; exit 2; }
 # ---------------------------------------------------------------------------
 section "Preflight"
 
-for t in terraform aws kubectl jq; do
+for t in terraform aws kubectl jq timeout; do
   command -v "$t" >/dev/null 2>&1 || die "required tool not on PATH: $t"
 done
-pass "terraform, aws, kubectl and jq are present"
+pass "terraform, aws, kubectl, jq and timeout are present"
+# `timeout` is GNU coreutils — stock macOS has no equivalent (needs
+# `brew install coreutils`). Caught here, not 10 minutes into §F's wait.
 
 # `terraform output` on an uninitialised or empty state prints an opaque error.
 # Resolve everything once, tolerate failure, then report it as a single ABORT.
@@ -71,6 +77,8 @@ pass "terraform state resolves: cluster=$CLUSTER region=$REGION"
 
 NS="${VERIFY_NAMESPACE:-demo}"
 MIN_VCPU_QUOTA="${VERIFY_MIN_VCPU_QUOTA:-104}"
+# shellcheck disable=SC2206  # deliberate word splitting: a space-separated override becomes an array
+EXPECT_LOG_TYPES=(${VERIFY_EXPECT_LOG_TYPES:-api audit authenticator controllerManager scheduler})
 
 # The single most dangerous failure mode for this script: a kubeconfig pointing
 # at an unrelated cluster. §D applies workloads and §F deletes them, so this is
@@ -147,15 +155,16 @@ else
   fail "Kubernetes version drift: live='${LIVE_VERSION:-?}' terraform='${TF_VERSION:-?}'"
 fi
 
-# S-22: all five control-plane log types, not "some logging".
+# S-22: all five control-plane log types by default, not "some logging" —
+# override VERIFY_EXPECT_LOG_TYPES for a deliberately narrowed config.
 # shellcheck disable=SC2016  # JMESPath: backticks are literals, they must NOT be shell-expanded
 LOGS_ON="$(aws eks describe-cluster --region "$REGION" --name "$CLUSTER" \
   --query 'cluster.logging.clusterLogging[?enabled==`true`].types[]' --output text 2>/dev/null | tr '\t' '\n' | sort || true)"
 MISSING_LOGS=""
-for t in api audit authenticator controllerManager scheduler; do
+for t in "${EXPECT_LOG_TYPES[@]}"; do
   printf '%s\n' "$LOGS_ON" | grep -qx "$t" || MISSING_LOGS="$MISSING_LOGS $t"
 done
-if [ -z "${MISSING_LOGS// /}" ]; then pass "all five control-plane log types enabled"
+if [ -z "${MISSING_LOGS// /}" ]; then pass "all expected control-plane log types enabled (${EXPECT_LOG_TYPES[*]})"
 else fail "control-plane log types not enabled:$MISSING_LOGS"; fi
 
 # S-21: envelope encryption with OUR key, not just the AWS-owned default.
@@ -435,6 +444,18 @@ else
     fail "SNS subscription never confirmed — the CMK alarm cannot notify anyone"
   else
     pass "SNS email subscription is confirmed"
+  fi
+
+  # REVIEW.md F-04: alias/aws/sns can't be granted to events.amazonaws.com,
+  # so every EventBridge publish would fail at KMS. Assert a real CMK instead.
+  TOPIC_KEY="$(aws sns get-topic-attributes --region "$REGION" --topic-arn "$TOPIC" \
+    --query 'Attributes.KmsMasterKeyId' --output text 2>/dev/null || true)"
+  if [ -z "$TOPIC_KEY" ] || [ "$TOPIC_KEY" = "None" ]; then
+    pass "SNS topic is unencrypted (acceptable — no SNS-encryption row in the checklist)"
+  elif [ "$TOPIC_KEY" = "alias/aws/sns" ]; then
+    fail "SNS topic uses alias/aws/sns — EventBridge cannot publish to it, this alarm is dead (S-29, F-04)"
+  else
+    pass "SNS topic uses a CMK EventBridge can actually publish to: $TOPIC_KEY"
   fi
 fi
 

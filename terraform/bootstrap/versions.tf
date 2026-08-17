@@ -12,4 +12,15 @@ terraform {
 
 provider "aws" {
   region = var.region
+
+  # S-C1 applied here too — untagged, the state bucket/KMS key are invisible
+  # to the tag-filtered budget and Cost Explorer grouping.
+  default_tags {
+    tags = {
+      Project     = var.project_name
+      Environment = var.environment
+      ManagedBy   = "terraform"
+      Component   = "tfstate-backend"
+    }
+  }
 }

@@ -184,13 +184,24 @@ lot, and "not applied" does not mean "not checked."
 > ✅ Verified**, 54 are 📝 Implemented-not-verified, 2 are ⚠️ Deviations (S-12, S-27, both with a
 > recorded decision) and 5 are ❌ Not done (S-90–S-94, the optional phases).
 
+**Before that cycle, apply the post-delivery review.** [`REVIEW.md`](REVIEW.md) (2026-08-17)
+checked the deliverable against the assessment, this plan and current best practice, and found
+four apply-path/control defects static checks cannot see (an ungated `aws_ce_cost_allocation_tag`,
+the default-on quota request, a teardown gate keyed on a tag Karpenter v1 no longer sets, and an
+SNS topic on `alias/aws/sns` that EventBridge cannot publish to) plus a set of small doc/script
+inaccuracies. It is cut into three work packages with paste-ready agent prompts, in the same style
+as the phase docs, and adds a first-live-apply checklist. Run WP-1 → WP-2 → WP-3 first.
+
 **What closes that gap is one apply → verify → teardown cycle**, and nothing else can. The
 prerequisites have very different lead times, so start them in this order:
 
 1. **Days ahead — the EC2 vCPU quota.** A fresh account has 5 vCPU on each of `L-1216C47A` and
-   `L-34B43A08`; the bootstrap node group alone consumes 4. `request_service_quotas` defaults `true`
-   so `apply` opens both requests, but approval is asynchronous — applying and *then* waiting means
-   a cluster billing NAT while Karpenter can launch nothing (gotchas G-02).
+   `L-34B43A08`; the bootstrap node group alone consumes 4. `request_service_quotas` now defaults
+   `false` (REVIEW.md F-02, fixed in WP-1 — the old `true` default errored on any account whose quota
+   was already above target or already had a request pending). Request the increase yourself before
+   applying, or set the variable `true` only on a fresh account with nothing pending. Either way this
+   is asynchronous — applying and *then* waiting means a cluster billing NAT while Karpenter can
+   launch nothing (gotchas G-02).
 2. **Before apply — four `terraform.tfvars` values**, two of which fail silently rather than loudly:
    `cluster_endpoint_public_access_cidrs` (mandatory, validation rejects empty and `0.0.0.0/0`),
    `budget_notification_email` (mandatory while `enable_budget_alarm` is on), `alert_email`

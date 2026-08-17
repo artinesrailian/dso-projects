@@ -167,7 +167,14 @@ variable "cluster_endpoint_public_access_cidrs" {
 
   validation {
     condition     = !contains(var.cluster_endpoint_public_access_cidrs, "0.0.0.0/0")
-    error_message = "0.0.0.0/0 is not allowed. Set your own /32, or use cluster_endpoint_public_access = false."
+    error_message = "0.0.0.0/0 is not allowed. Set your own /32, or use cluster_endpoint_public_access = false (then apply from inside the VPC — the Helm releases need the private endpoint)."
+  }
+
+  # Catches a bare IP with no mask before it reaches the EKS API — otherwise
+  # apply fails ~15 min in, after the VPC/cluster/NAT are already billing.
+  validation {
+    condition     = alltrue([for c in var.cluster_endpoint_public_access_cidrs : can(cidrnetmask(c))])
+    error_message = "Every entry must be a CIDR block with an explicit mask, e.g. 203.0.113.10/32 — not a bare IP."
   }
 }
 
@@ -190,7 +197,12 @@ variable "cluster_log_retention_days" {
 }
 
 variable "cluster_admin_principal_arns" {
-  description = "IAM principals granted cluster-admin via EKS access entries. Operators only."
+  description = <<-EOT
+    IAM principals granted cluster-admin via EKS access entries. Operators only.
+    Do NOT include the deploying identity (it already has one via
+    enable_cluster_creator_admin_permissions — EKS allows only one access entry
+    per principal) or list it in developer_principal_arns too. (REVIEW.md F-21.)
+  EOT
   type        = list(string)
   default     = []
 }
@@ -199,7 +211,8 @@ variable "developer_principal_arns" {
   description = <<-EOT
     IAM principals bound to the developer_rbac_group Kubernetes group via a STANDARD
     access entry with no AWS managed access policy. Permissions come from the ClusterRole
-    in phase-05 SS5.3d. Prefer SSO role ARNs over IAM users.
+    in phase-05 SS5.3d. Prefer SSO role ARNs over IAM users. Same caveats as
+    cluster_admin_principal_arns: not the deploying identity, not listed in both. (REVIEW.md F-21.)
   EOT
   type        = list(string)
   default     = []
@@ -317,9 +330,30 @@ variable "create_spot_service_linked_role" {
 }
 
 variable "request_service_quotas" {
-  description = "Opens vCPU quota-increase requests in code (prerequisite P3). Approval is asynchronous — apply success does not mean the quota is raised."
+  description = <<-EOT
+    Opens vCPU quota-increase requests in code (prerequisite P3), targeting
+    vcpu_quota_target. Opt-in: set true only on a fresh account whose current
+    quota is below the target with no request already pending — the resource
+    errors if the quota is already higher, or if a request is pending, and a
+    denied request leaves a perpetual diff. Approval is asynchronous regardless.
+    Otherwise raise the quota via console/Support and leave this false.
+  EOT
   type        = bool
-  default     = true
+  default     = false
+}
+
+variable "activate_cost_allocation_tags" {
+  description = <<-EOT
+    Activates the Project/Environment cost-allocation tags via
+    aws_ce_cost_allocation_tag. Only works from a management or standalone
+    account (fails permanently in an Organizations member account), and only
+    once those tag keys have appeared in billing data (~24h after the first
+    tagged resource exists). Otherwise activate in the Billing console, or via:
+      aws ce update-cost-allocation-tags-status --cost-allocation-tags-status \
+        TagKey=Project,Status=Active TagKey=Environment,Status=Active
+  EOT
+  type        = bool
+  default     = false
 }
 
 variable "vcpu_quota_target" {
@@ -390,13 +424,13 @@ variable "enable_amd64_nodepool" {
 ### Optional phases ##############################################################
 
 variable "enable_aws_load_balancer_controller" {
-  description = "Install the AWS Load Balancer Controller. Phase 9."
+  description = "Reserved for optional Phase 9 (AWS Load Balancer Controller) — not implemented. Setting this true has no effect; nothing in this stack reads it."
   type        = bool
   default     = false
 }
 
 variable "enable_metrics_server" {
-  description = "Install the Kubernetes metrics-server. Phase 10."
+  description = "Reserved for optional Phase 10 (metrics-server/HPA) — not implemented. Wired through to modules/eks but consumed by no resource there; setting this true has no effect."
   type        = bool
   default     = false
 }

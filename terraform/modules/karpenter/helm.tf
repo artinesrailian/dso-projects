@@ -36,7 +36,10 @@ resource "helm_release" "karpenter" {
   wait    = true
   timeout = 600
 
-  depends_on = [helm_release.karpenter_crd]
+  # module.karpenter carries the controller's Pod Identity association.
+  # Without this edge a controller pod can be scheduled before the
+  # association exists and never gets credentials. (REVIEW.md F-20.)
+  depends_on = [helm_release.karpenter_crd, module.karpenter]
 
   # helm provider v3: a LIST of objects, not repeated `set { }` blocks.
   set = [

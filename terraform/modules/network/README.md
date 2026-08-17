@@ -8,7 +8,9 @@ full rationale and `docs/contracts/interface-contract.md` §5.1 for this
 module's exact input/output contract.
 
 Every CIDR is derived from `var.vpc_cidr` with `cidrsubnet()` — nothing is
-hardcoded, so the module works for any `vpc_cidr` of `/20` or larger.
+hardcoded, so the module works for any `vpc_cidr` of `/18` or larger — the
+same bound the root module enforces, so the computed intra subnets never fall
+below `/24` (251 usable IPs, above AWS's recommended >=16-per-subnet floor).
 
 ## Subnet plan for the default CIDR (`10.0.0.0/16`, `az_count = 3`)
 

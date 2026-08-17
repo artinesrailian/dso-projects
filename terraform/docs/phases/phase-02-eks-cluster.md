@@ -210,7 +210,15 @@ KMS publishes no "key disabled" metric, so the trigger is a CloudTrail event via
 ```hcl
 resource "aws_sns_topic" "alerts" {
   name              = "${var.name}-alerts"
-  kms_master_key_id = "alias/aws/sns"
+  # NOT alias/aws/sns — post-delivery review REVIEW.md F-04 found that an
+  # EventBridge rule publishing to a topic on the AWS-managed SNS key fails
+  # every publish at KMS (that key's policy cannot be edited to grant
+  # events.amazonaws.com access), surfacing only as FailedInvocations, never
+  # a delivery. Use a dedicated CMK whose policy grants
+  # events.amazonaws.com kms:GenerateDataKey*/kms:Decrypt with NO
+  # aws:SourceArn condition (unsupported for this delivery path) — see the
+  # shipped modules/eks/main.tf for the exact policy document.
+  kms_master_key_id = aws_kms_key.alerts.arn
 }
 
 resource "aws_sns_topic_subscription" "alerts_email" {

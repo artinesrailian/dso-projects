@@ -175,7 +175,7 @@ constrained ones carry a `validation` block.
 | **Cluster** ||||
 | `kubernetes_version` | `string` | see `reference/version-pinning.md` | EKS minor, e.g. `"1.34"`. |
 | `cluster_endpoint_public_access` | `bool` | `true` | |
-| `cluster_endpoint_public_access_cidrs` | `list(string)` | `[]` | **Must be non-empty when public access is on** — enforce with a `validation` block; `0.0.0.0/0` is rejected. |
+| `cluster_endpoint_public_access_cidrs` | `list(string)` | `[]` | **Must be non-empty when public access is on** — enforce with a `validation` block; `0.0.0.0/0` is rejected, and (REVIEW.md F-26) every entry must carry an explicit mask — a bare IP like `203.0.113.10` is rejected before it reaches the EKS API. |
 | `cluster_endpoint_private_access` | `bool` | `true` | Always on. |
 | `cluster_enabled_log_types` | `list(string)` | `["api","audit","authenticator","controllerManager","scheduler"]` | |
 | `cluster_log_retention_days` | `number` | `90` | 90 is the module default, not an AWS recommendation. Drop to `7` for a POC. |
@@ -194,7 +194,8 @@ constrained ones carry a `validation` block.
 | `bootstrap_node_desired_size` | `number` | `2` | Note: the EKS module **ignores** changes to this after creation (see `reference/gotchas.md` G-06). |
 | `taint_bootstrap_nodes` | `bool` | `true` | Taints the bootstrap group `CriticalAddonsOnly=true:NoSchedule` so user workloads only land on Karpenter nodes. |
 | `create_spot_service_linked_role` | `bool` | `false` (changed from `true` in Phase 3 — see its completion report) | Creates `AWSServiceRoleForEC2Spot`. Defaults `false` because the resource errors if the role already exists (any account that has used Spot before) and a root-level `import` block was found to hard-fail `terraform apply` on the fresh-account case instead — see `modules/karpenter/README.md`. Set `true` only after confirming the role does not already exist. |
-| `request_service_quotas` | `bool` | `true` | Opens vCPU quota-increase requests in code (P3). Approval is asynchronous — apply success ≠ quota raised. |
+| `request_service_quotas` | `bool` | `false` (changed from `true` — see REVIEW.md F-02) | Opens vCPU quota-increase requests in code (P3), targeting `vcpu_quota_target`. Opt-in: the resource errors if the current quota is already higher than the target, or if a request is already pending, and a denied request leaves a perpetual diff. Set `true` only on a fresh account with headroom and no open request. |
+| `activate_cost_allocation_tags` | `bool` | `false` | Activates the `Project`/`Environment` cost-allocation tags via `aws_ce_cost_allocation_tag`. Opt-in: only works from a management/standalone account (permanently fails in an AWS Organizations member account), and only after those tag keys have appeared in billing data (~24h after the first tagged resource exists). See REVIEW.md F-01. |
 | `vcpu_quota_target` | `number` | `128` | Must exceed `nodepool_cpu_limit` + the bootstrap group, or the account quota becomes the real ceiling. |
 | `developer_rbac_group` | `string` | `"opsfleet:developers"` | Kubernetes group bound to the developer ClusterRole. Access entries reference it via `kubernetes_groups`; **no AWS managed access policy is associated.** |
 | **NodePools** ||||

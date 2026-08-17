@@ -354,17 +354,31 @@ resource "aws_budgets_budget" "account_backstop" {
 Note in the README that AWS Budgets refreshes cost data only 1–3 times a day, so neither budget is a
 real-time control. They catch a forgotten cluster, not a runaway loop.
 
-**Activate the cost allocation tags in Terraform — do not document it as a manual step.** The AWS
-provider has a resource for it, so the "one-time Billing console click" every guide describes is
-avoidable:
+**Activate the cost allocation tags in Terraform, gated behind an opt-in toggle — do not document it
+as a manual step, and do not make it unconditional either.** The AWS provider has a resource for it,
+so the "one-time Billing console click" every guide describes is avoidable, but the resource itself
+has two real failure modes an ungated `apply` hits immediately (found in post-delivery review
+REVIEW.md F-01, and fixed in the shipped code): the provider's `UpdateCostAllocationTagsStatus`
+errors for a tag key that has never appeared in billing data are silently discarded, so the
+post-create read then fails until that key has actually shown up in billing — up to 24h after the
+first tagged resource exists, which is always true on a fresh `make bootstrap` → `make apply` run;
+and in an AWS Organizations **member** account, only the management account can manage
+cost-allocation tags at all, so the resource fails permanently there, not just slowly. Gate it:
 
 ```hcl
+variable "activate_cost_allocation_tags" {
+  type    = bool
+  default = false
+}
+
 resource "aws_ce_cost_allocation_tag" "project" {
+  count   = var.activate_cost_allocation_tags ? 1 : 0
   tag_key = "Project"
   status  = "Active"
 }
 
 resource "aws_ce_cost_allocation_tag" "environment" {
+  count   = var.activate_cost_allocation_tags ? 1 : 0
   tag_key = "Environment"
   status  = "Active"
 }
@@ -404,6 +418,12 @@ succeeding does **not** mean the quota is raised. It is strictly better than a r
 recorded, repeatable and reviewable), but Phase 8's `verify.sh` must still assert the *effective*
 quota with `get-service-quota` before declaring the cluster ready. Default `request_service_quotas`
 to `true` and document that a refusal needs a support ticket.
+
+> Correction (REVIEW.md F-02, applied in WP-1): default flipped to `false`. Provider 6.60.0's
+> `aws_servicequotas_service_quota` Create errors if the current quota is already ≥ target, and a
+> pending manual request throws `ResourceAlreadyExistsException` on Create (only Update swallows it)
+> — so a `true` default breaks the apply on any account that isn't fresh with nothing pending,
+> including one that already followed this doc's own "request an increase" guidance. Opt-in only.
 
 ### 0.8 `main.tf` and `outputs.tf`
 

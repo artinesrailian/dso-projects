@@ -4,12 +4,12 @@ variable "name" {
 }
 
 variable "vpc_cidr" {
-  description = "CIDR block for the dedicated VPC. Must be /20 or larger so the computed intra subnets (a /24 slice) stay within range and cidrsubnet() cannot fail with an unhelpful error."
+  description = "CIDR block for the dedicated VPC. Must be /18 or larger — matches the root's own invariant, so the computed intra subnets stay at /24, above AWS's per-subnet recommendation."
   type        = string
 
   validation {
-    condition     = can(cidrhost(var.vpc_cidr, 0)) && tonumber(split("/", var.vpc_cidr)[1]) <= 20
-    error_message = "vpc_cidr must be a valid CIDR block with a prefix length of /20 or larger (smaller number)."
+    condition     = can(cidrhost(var.vpc_cidr, 0)) && tonumber(split("/", var.vpc_cidr)[1]) <= 18
+    error_message = "vpc_cidr must be a valid CIDR block with a prefix length of /18 or larger (smaller number)."
   }
 }
 
