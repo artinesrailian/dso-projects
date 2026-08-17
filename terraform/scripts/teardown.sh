@@ -158,7 +158,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step "2/6 Deleting NodePools, then NodeClaims, so Karpenter drains and terminates its nodes"
+step "2/6 Deleting NodePools, NodeClaims, then EC2NodeClasses, so Karpenter drains its nodes and cleans up after itself"
 
 # NodePools first (REVIEW.md F-23): deleting one cascades to its NodeClaims
 # and blocks new launches, closing the window where Karpenter could
@@ -169,7 +169,19 @@ kubectl delete nodepools --all --wait=true --timeout=15m || true
 # controller is still running to honour the termination finalizer — do this
 # before the controller is gone and the finalizer stops being reconciled (G-10).
 kubectl delete nodeclaims --all --wait=true --timeout=15m || true
-ok "NodePools and NodeClaims deletion returned"
+
+# Same principle as NodeClaims above, one level deeper: EC2NodeClass carries
+# its own finalizer (karpenter.k8s.aws/termination) that cleans up the
+# AWS-side IAM instance profile, and only the running controller can process
+# it. Reproduced live: leaving this to Terraform meant helm_release.karpenter
+# (the controller) was destroyed first, then helm uninstall karpenter-crd
+# hung the full 5 minutes on "context deadline exceeded" — the CRD couldn't
+# delete because the EC2NodeClass instance's finalizer could never complete
+# with no controller left to reconcile it. `|| true` here for the same
+# reason as NodePools/NodeClaims: a cluster that never had an EC2NodeClass
+# (or already lacks the CRD) must not abort the script.
+kubectl delete ec2nodeclasses --all --wait=true --timeout=15m || true
+ok "NodePools, NodeClaims and EC2NodeClasses deletion returned"
 
 # ---------------------------------------------------------------------------
 step "3/6 Verifying no Karpenter instances remain"
@@ -341,3 +353,21 @@ printf 'To remove those too: terraform -chdir=bootstrap destroy\n\n'
 # already wedged, never routine cleanup — and it does not terminate the EC2
 # instances, so verify the instance list is empty afterwards before assuming
 # the account is clean.
+#
+# The same wedge shape can happen one level up if step 2's EC2NodeClass
+# deletion above is ever skipped or the controller dies mid-finalizer: helm
+# uninstall karpenter-crd hangs its full timeout on "context deadline
+# exceeded" because the CRD can't delete while an EC2NodeClass instance's
+# own karpenter.k8s.aws/termination finalizer can never complete with no
+# controller left to process it (kubectl get ec2nodeclass <name> -ojsonpath=
+# '{.metadata.finalizers}' confirms it's stuck there). The equivalent
+# recovery:
+#
+#   kubectl patch ec2nodeclass <name> --type=merge -p '{"metadata":{"finalizers":[]}}'
+#
+# Same trade-off as the node one-liner, worse: this specific finalizer's job
+# is deleting an AWS-side IAM instance profile, so bypassing it orphans that
+# profile — untracked by Terraform, low-cost but needs manual cleanup via
+# `aws iam list-instance-profiles` / `delete-instance-profile`. Step 2
+# deleting EC2NodeClasses while the controller is still alive exists
+# specifically so this workaround is never needed.
