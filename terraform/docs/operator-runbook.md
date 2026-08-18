@@ -333,7 +333,9 @@ kubectl logs -n kube-system -l app.kubernetes.io/name=karpenter --tail=50 | grep
 kubectl get nodepools                                          # amd64, arm64
 kubectl get ec2nodeclass default -o yaml | grep -A5 conditions # Ready, no discovery errors
 
-# Full check
+# Full check — narrowed cluster_enabled_log_types below the default 5 (e.g. the POC override
+# in terraform.tfvars.example / README.md)? The S-22 check fails unless you match it:
+# VERIFY_EXPECT_LOG_TYPES="audit" make verify — expected, not a bug. See REVIEW.md F-15.
 make verify
 ```
 
