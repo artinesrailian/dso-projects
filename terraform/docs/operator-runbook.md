@@ -160,6 +160,15 @@ aws service-quotas request-service-quota-increase \
 aws ec2 describe-instance-type-offerings --region "$AWS_REGION" \
   --filters Name=instance-type,Values=m7g.large,c7g.large,t4g.medium \
   --query 'InstanceTypeOfferings[].InstanceType'
+
+# 4. CloudTrail. Required for the S-29 KMS-danger alarm to ever fire — its
+#    EventBridge rule watches CloudTrail's DisableKey/ScheduleKeyDeletion/
+#    DisableKeyRotation events, so with no trail present the alarm is
+#    silently dead no matter how correctly everything else is configured.
+#    This stack does not create a trail itself (a target account is expected
+#    to already have one via org-wide governance) — just confirm one exists.
+#    See AUDIT.md:61 (S-29) and scripts/verify.sh §D2b, which asserts this live.
+aws cloudtrail describe-trails --region "$AWS_REGION" --query 'length(trailList)'
 ```
 
 There is **no separate Graviton quota** — arm64 families (`t4g`, `m7g`, `c7g`, `r8g`) are all
