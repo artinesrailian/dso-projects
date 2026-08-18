@@ -24,8 +24,12 @@ kubectl get nodes -L kubernetes.io/arch,karpenter.sh/capacity-type,node.kubernet
 
 > `nodeclaims` and `nodes` are cluster-scoped — your developer access is namespace-scoped and does
 > not grant them, so those two commands return `Forbidden`. That's expected, not a broken cluster:
-> `kubectl get pods -n demo -o wide` already tells you your pod is running; ask the platform team if
-> you need to see which node/architecture it landed on.
+> `kubectl get pods -n demo -o wide` already tells you your pod is running. To see which node and
+> architecture it landed on yourself, with no cluster-scoped access needed, use §5's
+> `job-arch-check.yaml` — it reads its own node name via the downward API (`spec.nodeName`, a
+> pod-level read, not a cluster one) and its architecture directly (`uname -m`), both printed in
+> the job's own logs. Only listing nodes cluster-wide (`kubectl get nodes`) genuinely needs the
+> platform team.
 
 ## 3. Run on x86 (amd64)
 
@@ -54,7 +58,7 @@ a hard `nodeSelector`.
 ```bash
 kubectl apply -f job-arch-check.yaml
 kubectl wait --for=condition=complete --timeout=5m job/arch-check -n demo
-kubectl logs -n demo job/arch-check          # prints aarch64 on Graviton, x86_64 on Intel/AMD
+kubectl logs -n demo job/arch-check          # prints pod, architecture AND node name — aarch64 on Graviton, x86_64 on Intel/AMD
 ```
 
 ## 6. Clean up
