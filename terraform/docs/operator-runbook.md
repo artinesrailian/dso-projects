@@ -369,6 +369,26 @@ kubectl get ec2nodeclass default -o yaml | grep -A5 conditions # Ready, no disco
 make verify
 ```
 
+#### `VERIFY_*` overrides
+
+`./scripts/verify.sh` (what `make verify` runs) hardcodes defaults sized for a stock config. If
+you've deliberately deviated from one, the matching check FAILs with no explanation unless you
+override it — the failure message names what's wrong, not which env var fixes it.
+
+| Override | Default | You need it if… | How to compute the value |
+|---|---|---|---|
+| `VERIFY_MIN_VCPU_QUOTA` | `104` | You lowered `nodepool_cpu_limit` in `terraform.tfvars` instead of requesting a quota increase (§1.3) | `nodepool_cpu_limit` + the bootstrap group's 4 vCPU — e.g. `nodepool_cpu_limit = 20` → `VERIFY_MIN_VCPU_QUOTA=24` |
+| `VERIFY_EXPECT_LOG_TYPES` | all five (`api audit authenticator controllerManager scheduler`) | You narrowed `cluster_enabled_log_types` (the POC cost-saver override) | The exact list you set, space-separated — e.g. `"audit"` |
+| `VERIFY_NAMESPACE` | `demo` | You deployed workloads into a different governed namespace | The namespace name |
+| `VERIFY_SKIP_SCHEDULING` | unset | You want a faster partial check and don't need §D's real-workload scheduling proof | `1` to skip (~10 min saved) |
+| `VERIFY_SKIP_CONSOLIDATION` | unset | Same, for §F's scale-to-zero wait | `1` to skip (~10 min saved) |
+
+Both `nodepool_cpu_limit` and `cluster_enabled_log_types` narrowed together:
+
+```bash
+VERIFY_MIN_VCPU_QUOTA=24 VERIFY_EXPECT_LOG_TYPES="audit" make verify
+```
+
 ### When a stage fails
 
 1. Read the error, then match the symptom in [`reference/gotchas.md`](reference/gotchas.md) — G-01
