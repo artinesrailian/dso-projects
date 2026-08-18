@@ -45,17 +45,60 @@ for t in terraform aws kubectl; do
   command -v "$t" >/dev/null 2>&1 || abort "required tool not on PATH: $t"
 done
 
-# On an uninitialised or empty state this errors opaquely at line 1. Catch it
-# and say the useful thing instead.
-CLUSTER="$(terraform output -raw cluster_name 2>/dev/null || true)"
-REGION="$(terraform output -raw region 2>/dev/null || true)"
+# A destroy that fails partway through cannot be resumed via `terraform
+# output`: Terraform nulls every root output the instant a destroy operation
+# begins APPLYING, independent of how far it actually gets — observed live,
+# `terraform output` returned nothing for everything after a destroy failed
+# 46/110 resource actions in, with the cluster and most resources still fully
+# intact. `terraform apply -refresh-only` recovers the outputs, but is not a
+# safe universal fix here: module.karpenter's vendored data sources
+# unconditionally index aws_sqs_queue.this[0]/aws_iam_role.node[0] (see the
+# -refresh-only warning in docs/operator-runbook.md §3) — if a DIFFERENT
+# partial-failure ordering had already destroyed those two specific
+# resources, -refresh-only would hit the same "Invalid index: empty tuple"
+# error instead of fixing anything.
+#
+# cluster_name and region need none of that: they are pure configuration
+# (local.name = "${var.project_name}-${var.environment}", and var.region —
+# see outputs.tf/locals.tf), with zero dependency on any resource being
+# intact. `terraform console` evaluates them straight from config, making no
+# AWS calls and no refresh, so it works identically whether state is empty,
+# fully applied, or stuck mid-destroy. Confirmed against real state: `local
+# .name` returned the cluster's actual recorded `name` attribute even while
+# `terraform output` returned nothing for it.
+tf_console() {
+  local out
+  out="$(printf '%s\n' "$1" | terraform console 2>&1)" \
+    && { printf '%s' "$out" | sed -e 's/^"//' -e 's/"$//'; return 0; }
+  sleep 3
+  out="$(printf '%s\n' "$1" | terraform console 2>&1)" \
+    && { printf '%s' "$out" | sed -e 's/^"//' -e 's/"$//'; return 0; }
+  printf '%s' "$out"
+  return 1
+}
+
+# `terraform console` only needs the config, not a populated state, so it
+# can't tell "nothing was ever applied" from "everything already destroyed"
+# on its own the way the old terraform-output check incidentally did.
+# Restore that signal from `terraform state list`, which is unaffected by
+# destroy's output-nulling since it lists state directly.
+if [ -z "$(terraform state list 2>/dev/null || true)" ]; then
+  abort "no resources in Terraform state — nothing to tear down.
+       Either nothing was ever applied, or a previous teardown already completed."
+fi
+
+TF_CLUSTER_ERR=""
+if CLUSTER="$(tf_console local.name)"; then :; else TF_CLUSTER_ERR="$CLUSTER"; CLUSTER=""; fi
+TF_REGION_ERR=""
+if REGION="$(tf_console var.region)"; then :; else TF_REGION_ERR="$REGION"; REGION=""; fi
 ENDPOINT="$(terraform output -raw cluster_endpoint 2>/dev/null || true)"
 VPC_ID="$(terraform output -raw vpc_id 2>/dev/null || true)"
 
 if [ -z "$CLUSTER" ] || [ -z "$REGION" ]; then
-  abort "no readable Terraform state in $(pwd).
-       Either nothing was ever applied (there is nothing to tear down), or the
-       backend is not initialised — run 'terraform init -backend-config=backend.hcl' first."
+  abort "could not evaluate local.name/var.region via 'terraform console' after retrying once.
+       Real error: ${TF_CLUSTER_ERR:-$TF_REGION_ERR}
+       The working directory may not be initialised — run
+       'terraform init -backend-config=backend.hcl' first — or terraform.tfvars is missing/broken."
 fi
 ok "cluster=$CLUSTER region=$REGION vpc=${VPC_ID:-<unknown>}"
 
@@ -115,7 +158,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-step "2/6 Deleting NodePools, then NodeClaims, so Karpenter drains and terminates its nodes"
+step "2/6 Deleting NodePools, NodeClaims, then EC2NodeClasses, so Karpenter drains its nodes and cleans up after itself"
 
 # NodePools first (REVIEW.md F-23): deleting one cascades to its NodeClaims
 # and blocks new launches, closing the window where Karpenter could
@@ -126,7 +169,19 @@ kubectl delete nodepools --all --wait=true --timeout=15m || true
 # controller is still running to honour the termination finalizer — do this
 # before the controller is gone and the finalizer stops being reconciled (G-10).
 kubectl delete nodeclaims --all --wait=true --timeout=15m || true
-ok "NodePools and NodeClaims deletion returned"
+
+# Same principle as NodeClaims above, one level deeper: EC2NodeClass carries
+# its own finalizer (karpenter.k8s.aws/termination) that cleans up the
+# AWS-side IAM instance profile, and only the running controller can process
+# it. Reproduced live: leaving this to Terraform meant helm_release.karpenter
+# (the controller) was destroyed first, then helm uninstall karpenter-crd
+# hung the full 5 minutes on "context deadline exceeded" — the CRD couldn't
+# delete because the EC2NodeClass instance's finalizer could never complete
+# with no controller left to reconcile it. `|| true` here for the same
+# reason as NodePools/NodeClaims: a cluster that never had an EC2NodeClass
+# (or already lacks the CRD) must not abort the script.
+kubectl delete ec2nodeclasses --all --wait=true --timeout=15m || true
+ok "NodePools, NodeClaims and EC2NodeClasses deletion returned"
 
 # ---------------------------------------------------------------------------
 step "3/6 Verifying no Karpenter instances remain"
@@ -176,6 +231,42 @@ EOF
   exit 1
 fi
 ok "zero Karpenter instances remain — safe to hand over to Terraform"
+
+# A Spot Instance Request is a DISTINCT AWS object from the EC2 instance it
+# launched, and can stay open/active for a short window after the instance
+# is confirmed terminated. terraform destroy's aws_iam_service_linked_role.spot
+# deletion checks REQUEST state, not instance state, so the two checks can
+# disagree during that lag — observed live: the role deletion failed with
+# "Open or Active spot instance requests found" moments after this script had
+# already confirmed zero instances. The window is transient (re-checking a
+# few minutes later showed the same request closed), so poll instead of
+# failing on the first look. The service-linked role is account/region-wide,
+# not scoped to this cluster, so unlike the instance check above, this one is
+# deliberately NOT tag-filtered — a request from unrelated Spot usage in the
+# same account still blocks the same deletion.
+note "waiting for open/active Spot Instance Requests to clear..."
+SPOT_CLEAR=0
+for i in $(seq 1 6); do
+  if ! SPOT_LEFT="$(aws ec2 describe-spot-instance-requests --region "$REGION" \
+        --filters Name=state,Values=open,active \
+        --query 'SpotInstanceRequests[].SpotInstanceRequestId' --output text)"; then
+    abort "could not query EC2 for open Spot Instance Requests.
+       Refusing to proceed blind — resolve the AWS error above and re-run."
+  fi
+  SPOT_LEFT="$(printf '%s' "$SPOT_LEFT" | tr '\t' '\n' | grep -v '^$' || true)"
+  if [ -z "$SPOT_LEFT" ]; then SPOT_CLEAR=1; break; fi
+  note "  still open/active ($i/6) — waiting 30s..."
+  sleep 30
+done
+if [ "$SPOT_CLEAR" != "1" ]; then
+  abort "Spot Instance Requests still open/active after 3 minutes:
+$(printf '%s\n' "$SPOT_LEFT" | sed 's/^/       /')
+       terraform destroy will fail deleting aws_iam_service_linked_role.spot while these are
+       open. This is usually AWS's own eventual-consistency lag, not a real leak — wait a few
+       more minutes and re-run ./scripts/teardown.sh. If it never clears, investigate with:
+       aws ec2 describe-spot-instance-requests --region $REGION --filters Name=state,Values=open,active"
+fi
+ok "zero open/active Spot Instance Requests remain"
 
 # ---------------------------------------------------------------------------
 step "4/6 Destroying the Terraform-managed stack"
@@ -262,3 +353,21 @@ printf 'To remove those too: terraform -chdir=bootstrap destroy\n\n'
 # already wedged, never routine cleanup — and it does not terminate the EC2
 # instances, so verify the instance list is empty afterwards before assuming
 # the account is clean.
+#
+# The same wedge shape can happen one level up if step 2's EC2NodeClass
+# deletion above is ever skipped or the controller dies mid-finalizer: helm
+# uninstall karpenter-crd hangs its full timeout on "context deadline
+# exceeded" because the CRD can't delete while an EC2NodeClass instance's
+# own karpenter.k8s.aws/termination finalizer can never complete with no
+# controller left to process it (kubectl get ec2nodeclass <name> -ojsonpath=
+# '{.metadata.finalizers}' confirms it's stuck there). The equivalent
+# recovery:
+#
+#   kubectl patch ec2nodeclass <name> --type=merge -p '{"metadata":{"finalizers":[]}}'
+#
+# Same trade-off as the node one-liner, worse: this specific finalizer's job
+# is deleting an AWS-side IAM instance profile, so bypassing it orphans that
+# profile — untracked by Terraform, low-cost but needs manual cleanup via
+# `aws iam list-instance-profiles` / `delete-instance-profile`. Step 2
+# deleting EC2NodeClasses while the controller is still alive exists
+# specifically so this workaround is never needed.
